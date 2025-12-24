@@ -45,3 +45,7 @@ Header: X-Extension-Token
 If you upgraded from an older zip, the app will auto-add missing columns (like applications.user_id) on startup.
 
 - GET /v1/applications/paged?user_id=u1&page=1&page_size=50
+
+- GET /v1/applications/paged?user_id=u1&page=1&page_size=50&q=google&stage=interview&date_from=2025-12-01&date_to=2025-12-31
+- GET /v1/applications/kanban?user_id=u1&stage=applied&page=1&page_size=50&q=amazon
+- GET /v1/applications/stats?user_id=u1&days=60

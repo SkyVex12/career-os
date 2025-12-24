@@ -80,3 +80,5 @@ a:hover{text-decoration:underline}
   .grid2{grid-template-columns:1fr}
   .kanban{grid-template-columns:1fr}
 }
+
+.recharts-legend-item-text{ color: rgba(255,255,255,.75) !important; }

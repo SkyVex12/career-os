@@ -1,181 +1,147 @@
 'use client';
 
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch } from "../lib/api";
 import TopbarClient from "../components/TopbarClient";
+import { apiFetch } from "../lib/api";
+import {
+  ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
+  PieChart, Pie, Cell, Legend
+} from "recharts";
 
-function pct(n) {
-  if (!isFinite(n)) return "0%";
-  return `${Math.round(n * 100)}%`;
+const COLORS = ["#60a5fa", "#34d399", "#a78bfa", "#f87171", "#fbbf24", "#22c55e"];
+
+function kpiSub(label, value) {
+  return (
+    <div className="small" style={{ marginTop: 2 }}>
+      {label}: <b>{value}</b>
+    </div>
+  );
 }
 
 export default function DashboardPage() {
-  const [items, setItems] = useState([]);
-  const [status, setStatus] = useState("Loading...");
-  const [rangeDays, setRangeDays] = useState(90);
+  const userId = useMemo(() => {
+    if (typeof window === "undefined") return "u1";
+    return localStorage.getItem("careeros_user_id") || "u1";
+  }, []);
 
-  async function refresh() {
+  const [days, setDays] = useState(60);
+  const [data, setData] = useState(null);
+  const [status, setStatus] = useState("");
+
+  async function load() {
     try {
       setStatus("Loading...");
-      // NOTE: this expects your backend to provide GET /v1/applications
-      const userId = (typeof window !== 'undefined' ? (localStorage.getItem('careeros_user_id') || 'u1') : 'u1');
-      const data = await apiFetch(`/v1/applications?user_id=${encodeURIComponent(userId)}`);
-      setItems(Array.isArray(data) ? data : []);
+      const params = new URLSearchParams({ user_id: userId, days: String(days) });
+      const d = await apiFetch(`/v1/applications/stats?${params.toString()}`);
+      setData(d);
       setStatus("");
     } catch (e) {
-      setStatus(`Error: ${e.message}\n\nIf you haven't added /v1/applications in the backend yet, we'll add it next.`);
+      setStatus(`Error: ${e.message}`);
     }
   }
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [days]);
 
-  const filtered = useMemo(() => {
-    const now = Date.now();
-    const cutoff = now - rangeDays * 24 * 60 * 60 * 1000;
-    return items.filter((x) => {
-      const d = x.created_at ? Date.parse(x.created_at) : null;
-      return !d || d >= cutoff;
-    });
-  }, [items, rangeDays]);
-
-  const stats = useMemo(() => {
-    const byStage = {};
-    for (const a of filtered) {
-      const stage = (a.stage || "applied").toLowerCase();
-      byStage[stage] = (byStage[stage] || 0) + 1;
-    }
-    const total = filtered.length;
-    const applied = (byStage.applied || 0) + (byStage.submitted || 0);
-    const interview = (byStage.interview || 0) + (byStage.interviewing || 0) + (byStage.phone || 0);
-    const rejected = (byStage.rejected || 0) + (byStage.declined || 0);
-    const offer = (byStage.offer || 0) + (byStage.offered || 0);
-
-    const interviewRate = total ? interview / total : 0;
-    const offerRate = total ? offer / total : 0;
-    const rejectRate = total ? rejected / total : 0;
-
-    return { total, applied, interview, rejected, offer, byStage, interviewRate, offerRate, rejectRate };
-  }, [filtered]);
-
-  const topStages = useMemo(() => {
-    const entries = Object.entries(stats.byStage).sort((a,b)=>b[1]-a[1]);
-    return entries.slice(0, 8);
-  }, [stats.byStage]);
+  const stagePie = useMemo(() => {
+    if (!data?.stage_counts) return [];
+    const map = data.stage_counts;
+    return Object.keys(map).map((k) => ({ name: k, value: map[k] })).sort((a,b)=>b.value-a.value);
+  }, [data]);
 
   return (
     <main className="container">
-      <TopbarClient title="Dashboard" subtitle="Your funnel, success rate, and recent activity." />
-      <p style={{ marginTop: 6, color: "#444" }}>
-        Overview of your applications — counts, rates, and funnel health.
-      </p>
+      <TopbarClient title="Dashboard" subtitle="Fast view of your pipeline health + trends." />
 
-      <div style={{ display: "flex", gap: 10, alignItems: "center", margin: "12px 0" }}>
-        <label style={{ fontSize: 12, color: "#222" }}>Time range</label>
-        <select value={rangeDays} onChange={(e) => setRangeDays(Number(e.target.value))}>
-          <option value={30}>Last 30 days</option>
-          <option value={60}>Last 60 days</option>
-          <option value={90}>Last 90 days</option>
-          <option value={365}>Last 12 months</option>
-        </select>
-        <button onClick={refresh} style={{ padding: "6px 10px", cursor: "pointer" }}>Refresh</button>
+      <div className="card cardPad" style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <span className="chip">user: {userId}</span>
+          <span className="chip">window: last {days} days</span>
+          <select className="select" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+            <option value={30}>30 days</option>
+            <option value={60}>60 days</option>
+            <option value={90}>90 days</option>
+            <option value={180}>180 days</option>
+            <option value={365}>365 days</option>
+          </select>
+          <button className="btn btnGhost" onClick={load}>Refresh</button>
+          {status ? <span className="small">{status}</span> : null}
+        </div>
       </div>
 
-      {status ? (
-        <pre style={{ background: "#fff7ed", border: "1px solid #fed7aa", padding: 12, borderRadius: 10 }}>{status}</pre>
-      ) : null}
-
-      <div className="grid5">
-        <Card title="Total" value={stats.total} />
-        <Card title="Applied" value={stats.applied} />
-        <Card title="Interview" value={stats.interview} sub={pct(stats.interviewRate)} />
-        <Card title="Offers" value={stats.offer} sub={pct(stats.offerRate)} />
-        <Card title="Rejected" value={stats.rejected} sub={pct(stats.rejectRate)} />
+      <div className="grid5" style={{ marginBottom: 12 }}>
+        <div className="card cardPad">
+          <div className="kpiTitle">Total applications</div>
+          <div className="kpiValue">{data?.total ?? "—"}</div>
+          {kpiSub("Success rate", data ? `${Math.round((data.success_rate||0) * 100)}%` : "—")}
+        </div>
+        <div className="card cardPad">
+          <div className="kpiTitle">Applied</div>
+          <div className="kpiValue">{data?.applied_count ?? "—"}</div>
+          {kpiSub("Interview rate", data ? `${Math.round((data.interview_rate||0) * 100)}%` : "—")}
+        </div>
+        <div className="card cardPad">
+          <div className="kpiTitle">Interview</div>
+          <div className="kpiValue">{data?.interview_count ?? "—"}</div>
+          <div className="small" style={{ marginTop: 2 }}>Keep pushing.</div>
+        </div>
+        <div className="card cardPad">
+          <div className="kpiTitle">Offer</div>
+          <div className="kpiValue">{data?.offer_count ?? "—"}</div>
+          <div className="small" style={{ marginTop: 2 }}>🎯</div>
+        </div>
+        <div className="card cardPad">
+          <div className="kpiTitle">Rejected</div>
+          <div className="kpiValue">{data?.rejected_count ?? "—"}</div>
+          {kpiSub("Rejection rate", data ? `${Math.round((data.rejection_rate||0) * 100)}%` : "—")}
+        </div>
       </div>
 
       <div className="grid2">
         <div className="card cardPad">
-          <h3 style={{ margin: "0 0 8px 0" }}>Funnel</h3>
-          <FunnelRow label="Applied" n={stats.applied} total={stats.total} />
-          <FunnelRow label="Interview" n={stats.interview} total={stats.total} />
-          <FunnelRow label="Offer" n={stats.offer} total={stats.total} />
-          <FunnelRow label="Rejected" n={stats.rejected} total={stats.total} />
-          <div style={{ marginTop: 10, fontSize: 12, color: "#555" }}>
-            “Success rate” (offer/total): <b>{pct(stats.offerRate)}</b>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+            <div>
+              <div className="kpiTitle">Applications by date</div>
+              <div className="small">Counts per day (last {days} days)</div>
+            </div>
+          </div>
+
+          <div style={{ width: "100%", height: 320 }}>
+            <ResponsiveContainer>
+              <LineChart data={data?.series_daily || []}>
+                <CartesianGrid stroke="rgba(255,255,255,.10)" />
+                <XAxis dataKey="day" tick={{ fill: "rgba(255,255,255,.55)", fontSize: 11 }} />
+                <YAxis tick={{ fill: "rgba(255,255,255,.55)", fontSize: 11 }} allowDecimals={false} />
+                <Tooltip contentStyle={{ background: "rgba(15,23,42,.9)", border: "1px solid rgba(255,255,255,.12)", borderRadius: 12, color: "white" }} />
+                <Line type="monotone" dataKey="count" stroke="#60a5fa" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
         <div className="card cardPad">
-          <h3 style={{ margin: "0 0 8px 0" }}>By stage</h3>
-          {topStages.length === 0 ? (
-            <div style={{ fontSize: 12, color: "#666" }}>No data yet.</div>
-          ) : (
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {topStages.map(([k,v]) => (
-                <li key={k} style={{ fontSize: 13, marginBottom: 6 }}>
-                  <b>{k}</b>: {v}
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className="kpiTitle">Stage distribution</div>
+          <div className="small">Where your pipeline is concentrated</div>
+
+          <div style={{ width: "100%", height: 320, marginTop: 10 }}>
+            <ResponsiveContainer>
+              <PieChart>
+                <Pie data={stagePie} dataKey="value" nameKey="name" innerRadius={65} outerRadius={110} paddingAngle={3}>
+                  {stagePie.map((_, idx) => (
+                    <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Legend />
+                <Tooltip contentStyle={{ background: "rgba(15,23,42,.9)", border: "1px solid rgba(255,255,255,.12)", borderRadius: 12, color: "white" }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="small" style={{ marginTop: 10 }}>
+            Tip: if the pie is mostly <b>applied</b>, focus on improving conversion to <b>interview</b>.
+          </div>
         </div>
       </div>
-
-      <div style={{ marginTop: 14, border: "1px solid #eee", borderRadius: 14, padding: 12, background: "#fff" }}>
-        <h3 style={{ margin: "0 0 8px 0" }}>Recent applications</h3>
-        <table className="table">
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
-              <th style={{ padding: 8 }}>Company</th>
-              <th style={{ padding: 8 }}>Role</th>
-              <th style={{ padding: 8 }}>Stage</th>
-              <th style={{ padding: 8 }}>Date</th>
-              <th style={{ padding: 8 }}>URL</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.slice().sort((a,b)=> {
-              const da = a.created_at ? Date.parse(a.created_at) : 0;
-              const db = b.created_at ? Date.parse(b.created_at) : 0;
-              return db - da;
-            }).slice(0, 20).map((a) => (
-              <tr key={a.id} style={{ borderBottom: "1px solid #f2f2f2" }}>
-                <td style={{ padding: 8 }}>{a.company}</td>
-                <td style={{ padding: 8 }}>{a.role}</td>
-                <td style={{ padding: 8 }}>{a.stage || "applied"}</td>
-                <td style={{ padding: 8 }}>{a.created_at ? new Date(a.created_at).toLocaleDateString() : "-"}</td>
-                <td style={{ padding: 8 }}>
-                  {a.url ? <a href={a.url} target="_blank" rel="noreferrer">open</a> : "-"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </main>
-  );
-}
-
-function Card({ title, value, sub }) {
-  return (
-    <div className="card cardPad">
-      <div className="kpiTitle">{title}</div>
-      <div className="kpiValue">{value}</div>
-      {sub ? <div className="small" style={{ marginTop: 2 }}>{sub}</div> : null}
-    </div>
-  );
-}
-
-function FunnelRow({ label, n, total }) {
-  const ratio = total ? n / total : 0;
-  return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#333" }}>
-        <span>{label}</span>
-        <span><b>{n}</b> ({pct(ratio)})</span>
-      </div>
-      <div style={{ height: 10, background: "#f3f4f6", borderRadius: 999, overflow: "hidden", marginTop: 6 }}>
-        <div style={{ height: "100%", width: `${Math.max(2, ratio*100)}%`, background: "#111827" }} />
-      </div>
-    </div>
   );
 }
