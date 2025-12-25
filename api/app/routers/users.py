@@ -28,5 +28,6 @@ def list_users(
         return {"items": [{"id": u.id, "name": u.name}]} if u else {"items":[]}
 
     # admin
+    print(principal)
     users = db.query(User).filter(User.admin_id == principal["admin_id"]).order_by(User.id.asc()).all()
     return {"items": [{"id": u.id, "name": u.name} for u in users]}

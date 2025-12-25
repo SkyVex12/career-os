@@ -49,15 +49,30 @@ def ensure_sqlite_schema() -> None:
                 cur.execute("ALTER TABLE stored_files ADD COLUMN filename TEXT;")
                 cur.execute("UPDATE stored_files SET filename = 'file' WHERE filename IS NULL;")
 
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='admins';")
+        if cur.fetchone():
+            if not _has_column(cur, "admins", "name"):
+                cur.execute("ALTER TABLE admins ADD COLUMN name TEXT;")
+            if not _has_column(cur, "admins", "first_name"):
+                cur.execute("ALTER TABLE admins ADD COLUMN first_name TEXT;")
+            if not _has_column(cur, "admins", "last_name"):
+                cur.execute("ALTER TABLE admins ADD COLUMN last_name TEXT;")
+            if not _has_column(cur, "admins", "dob"):
+                cur.execute("ALTER TABLE admins ADD COLUMN dob TEXT;")
+
         cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users';")
         if cur.fetchone():
             if not _has_column(cur, "users", "admin_id"):
                 cur.execute("ALTER TABLE users ADD COLUMN admin_id TEXT;")
             if not _has_column(cur, "users", "name"):
                 cur.execute("ALTER TABLE users ADD COLUMN name TEXT;")
-
-
-        # credentials (email/password) for dev
+            if not _has_column(cur, "users", "first_name"):
+                cur.execute("ALTER TABLE users ADD COLUMN first_name TEXT;")
+            if not _has_column(cur, "users", "last_name"):
+                cur.execute("ALTER TABLE users ADD COLUMN last_name TEXT;")
+            if not _has_column(cur, "users", "dob"):
+                cur.execute("ALTER TABLE users ADD COLUMN dob TEXT;")
+# credentials (email/password) for dev
         admin_pw = _pbkdf2_hash("admin123")
         user_pw = _pbkdf2_hash("user123")
         cur.execute("INSERT OR IGNORE INTO auth_credentials (email, password_hash, principal_type, principal_id, created_at) VALUES (?,?,?,?,?);",

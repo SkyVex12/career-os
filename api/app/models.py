@@ -7,12 +7,18 @@ class Admin(Base):
     __tablename__ = "admins"
     id = Column(String, primary_key=True)
     name = Column(String, nullable=True)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
+    dob = Column(String, nullable=True)  # ISO date string (YYYY-MM-DD)
 
 class User(Base):
     __tablename__ = "users"
     id = Column(String, primary_key=True)  # extension-provided user_id (V1)
     admin_id = Column(String, ForeignKey("admins.id"), nullable=True, index=True)
     name = Column(String, nullable=True)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
+    dob = Column(String, nullable=True)  # ISO date string (YYYY-MM-DD)
 
 
 class AuthCredential(Base):
