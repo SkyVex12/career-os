@@ -1,53 +1,42 @@
-from .db import engine, Base
-from . import models  # noqa
-from app.migrations import migrate_sqlite
 
-import sqlite3
-from pathlib import Path
-from datetime import datetime
+from __future__ import annotations
 
-def ensure_sqlite_schema(database_url: str) -> None:
-    """Lightweight migration for SQLite: add new columns without Alembic."""
-    if not database_url.startswith("sqlite"):
-        return
+import datetime as dt
 
-    # sqlite:///relative/path.db OR sqlite:////absolute/path.db
-    db_path = database_url.replace("sqlite:///", "", 1)
-    db_path = db_path.replace("sqlite:////", "", 1)
-    db_path = str(Path(db_path))
-    if not db_path:
-        return
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
-    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+from .db import DB_PATH, engine, SessionLocal
+from .models import Base, Admin, User, AuthCredential, AuthToken
 
-    conn = sqlite3.connect(db_path)
+# NOTE: This project uses simple SQLAlchemy create_all for SQLite schema management.
+# If you delete the DB file, re-run `python -m app.init_db` or start uvicorn (it calls ensure_sqlite_schema).
+
+
+def ensure_sqlite_schema() -> None:
+    # Create tables
+    Base.metadata.create_all(bind=engine)
+
+    # Seed a dev admin + token for local development (safe to run repeatedly)
+    db: Session = SessionLocal()
     try:
-        cur = conn.cursor()
+        now = dt.datetime.utcnow()
 
-        def has_column(table: str, column: str) -> bool:
-            cur.execute(f"PRAGMA table_info({table});")
-            cols = [r[1] for r in cur.fetchall()]
-            return column in cols
+        admin = db.query(Admin).filter(Admin.id == "a1").first()
+        if not admin:
+            admin = Admin(id="a1", name="Dev Admin")
+            db.add(admin)
 
-        # stored_files: filename column introduced later
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='stored_files';")
-        if cur.fetchone():
-            if not has_column("stored_files", "filename"):
-                cur.execute("ALTER TABLE stored_files ADD COLUMN filename TEXT;")
+        # Add a dev token that the extension can use by default
+        tok = db.query(AuthToken).filter(AuthToken.token == "dev-admin").first()
+        if not tok:
+            db.add(AuthToken(token="dev-admin", principal_type="admin", principal_id="a1", created_at=now))
 
-        # applications: updated_at column for legacy DBs
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='applications';")
-        if cur.fetchone():
-            if not has_column("applications", "updated_at"):
-                cur.execute("ALTER TABLE applications ADD COLUMN updated_at DATETIME;")
-                # backfill updated_at with created_at where possible
-                try:
-                    cur.execute("UPDATE applications SET updated_at = created_at WHERE updated_at IS NULL;")
-                except Exception:
-                    pass
-
-        conn.commit()
+        db.commit()
     finally:
-        conn.close()
-Base.metadata.create_all(bind=engine)
-migrate_sqlite(engine)
+        db.close()
+
+
+if __name__ == "__main__":
+    ensure_sqlite_schema()
+    print(f"SQLite schema ensured at {DB_PATH}")

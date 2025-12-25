@@ -82,3 +82,104 @@ a:hover{text-decoration:underline}
 }
 
 .recharts-legend-item-text{ color: rgba(255,255,255,.75) !important; }
+
+
+/* Auth pages */
+.authShell{
+  min-height: 100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding: 28px;
+  background:
+    radial-gradient(1200px 500px at 18% 12%, rgba(59,130,246,.28), rgba(59,130,246,0) 55%),
+    radial-gradient(900px 500px at 84% 18%, rgba(168,85,247,.22), rgba(168,85,247,0) 60%),
+    radial-gradient(800px 500px at 70% 92%, rgba(34,197,94,.12), rgba(34,197,94,0) 55%),
+    linear-gradient(180deg, rgba(10,11,14,1), rgba(9,10,13,1));
+}
+.authCard{
+  width: 520px;
+  max-width: calc(100vw - 56px);
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 22px;
+  box-shadow: 0 22px 70px rgba(0,0,0,.40);
+  padding: 18px;
+  backdrop-filter: blur(10px);
+}
+.authBrand{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.authLogo{
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  background:
+    radial-gradient(12px 12px at 30% 30%, rgba(255,255,255,.75), rgba(255,255,255,0) 60%),
+    linear-gradient(135deg, rgba(59,130,246,1), rgba(168,85,247,1));
+  box-shadow: 0 10px 26px rgba(0,0,0,.35);
+  border: 1px solid rgba(255,255,255,.18);
+}
+.authTitle{ font-size: 22px; font-weight: 900; margin: 2px 0 2px; letter-spacing: -0.02em; }
+.authSubtitle{ color: rgba(255,255,255,.72); font-size: 13px; margin-bottom: 10px; }
+.authGrid2{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.authRow{ margin-top: 10px; }
+.authRow label{ display:block; font-size: 12px; color: rgba(255,255,255,.72); margin-bottom: 6px; }
+.authRow input, .authRow select{
+  width:100%;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(0,0,0,.22);
+  color: rgba(255,255,255,.92);
+  outline: none;
+}
+.authRow input::placeholder{ color: rgba(255,255,255,.38); }
+.authRow input:focus, .authRow select:focus{
+  border-color: rgba(59,130,246,.55);
+  box-shadow: 0 0 0 4px rgba(59,130,246,.15);
+}
+.authBtn{
+  width: 100%;
+  margin-top: 14px;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(59,130,246,1), rgba(168,85,247,1));
+  color:#fff;
+  font-weight: 900;
+  letter-spacing: .01em;
+  cursor:pointer;
+  box-shadow: 0 14px 34px rgba(59,130,246,.18);
+}
+.authBtn:hover{ filter: brightness(1.05); }
+.authBtn:active{ transform: translateY(1px); }
+.authLink{ margin-top: 12px; font-size: 13px; color: rgba(255,255,255,.75); }
+.authLink a{ color: rgba(255,255,255,.92); text-decoration:none; font-weight:800; }
+.authLink a:hover{ text-decoration: underline; }
+.authErr{
+  margin-top: 10px;
+  background: rgba(220,38,38,.12);
+  border: 1px solid rgba(220,38,38,.30);
+  color: rgba(254,202,202,.98);
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-size: 13px;
+}
+.authHint{
+  margin-top: 10px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  color: rgba(255,255,255,.68);
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+}
+@media (max-width:540px){
+  .authCard{ width: 100%; }
+  .authGrid2{ grid-template-columns: 1fr; }
+}

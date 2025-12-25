@@ -9,7 +9,7 @@ from app.db import engine
 from app.init_db import ensure_sqlite_schema
 
 def main():
-    ensure_sqlite_schema(str(engine.url))
+    ensure_sqlite_schema()
     print("OK: SQLite schema checked/updated.")
 
 if __name__ == "__main__":

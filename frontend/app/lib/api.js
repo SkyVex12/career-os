@@ -1,42 +1,40 @@
-'use client';
 
-const DEFAULT_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
-const DEFAULT_TOKEN = process.env.NEXT_PUBLIC_EXTENSION_TOKEN || "";
-
-export function getApiBase() {
-  // allow override via localStorage (optional)
-  if (typeof window !== "undefined") {
-    const v = window.localStorage.getItem("careeros_api_base");
-    if (v && v.startsWith("http")) return v.replace(/\/$/, "");
-  }
-  return DEFAULT_BASE.replace(/\/$/, "");
-}
+const DEFAULT_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
 
 export function getToken() {
-  if (typeof window !== "undefined") {
-    const t = window.localStorage.getItem("careeros_token");
-    if (t) return t;
-  }
-  return DEFAULT_TOKEN;
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("careeros_token") || "";
 }
 
-export async function apiFetch(path, init = {}) {
-  const base = getApiBase();
-  const token = getToken();
-  const headers = {
-    "Content-Type": "application/json",
-    ...(init.headers || {}),
-  };
-  // only add token if present (backend will 401 if required)
-  if (token) headers["X-Extension-Token"] = token;
+export function setToken(token) {
+  if (typeof window === "undefined") return;
+  if (!token) localStorage.removeItem("careeros_token");
+  else localStorage.setItem("careeros_token", token);
+}
 
-  const res = await fetch(`${base}${path}`, { ...init, headers });
-  const text = await res.text();
+export async function api(path, options = {}) {
+  const base = DEFAULT_BASE;
+  const url = path.startsWith("http") ? path : base + path;
+
+  const headers = new Headers(options.headers || {});
+  if (!headers.has("Content-Type") && options.body) headers.set("Content-Type", "application/json");
+
+  const tok = getToken();
+  if (tok) headers.set("X-Auth-Token", tok);
+
+  const res = await fetch(url, { ...options, headers, cache: "no-store" });
+  const ct = res.headers.get("content-type") || "";
   let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  if (ct.includes("application/json")) {
+    data = await res.json().catch(() => null);
+  } else {
+    data = await res.text().catch(() => "");
+  }
   if (!res.ok) {
-    const msg = (data && (data.detail || data.message)) ? (data.detail || data.message) : `HTTP ${res.status}`;
-    throw new Error(msg);
+    const msg = typeof data === "string" ? data : (data?.detail || data?.message || JSON.stringify(data));
+    throw new Error(msg || `HTTP ${res.status}`);
   }
   return data;
 }
+
+export const apiFetch = api;

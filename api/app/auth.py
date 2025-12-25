@@ -1,12 +1,69 @@
-import os
+
+from __future__ import annotations
+
+import secrets
+from dataclasses import dataclass
+from typing import Generator, Literal, Optional
+
 from fastapi import Header, HTTPException
-from dotenv import load_dotenv
+from sqlalchemy.orm import Session
 
-load_dotenv()
+from .db import SessionLocal
+from .models import AuthToken
 
-def require_extension_token(x_extension_token: str = Header(default="")):
-    expected = os.getenv("EXTENSION_TOKEN","")
-    # if not expected:
-    #     raise HTTPException(500, "EXTENSION_TOKEN not set")
-    # if x_extension_token != expected:
-    #     raise HTTPException(401, "Invalid extension token")
+
+PrincipalType = Literal["user", "admin"]
+
+
+@dataclass
+class Principal:
+    type: PrincipalType
+    id: str  # user_id or admin_id
+
+
+def get_db() -> Generator[Session, None, None]:
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def _token_from_header(x_auth_token: Optional[str]) -> str:
+    if not x_auth_token:
+        raise HTTPException(status_code=401, detail="Missing X-Auth-Token")
+    return x_auth_token.strip()
+
+
+def get_principal(
+    db: Session,
+    x_auth_token: Optional[str] = Header(default=None, alias="X-Auth-Token"),
+) -> Principal:
+    token = _token_from_header(x_auth_token)
+
+    row = db.query(AuthToken).filter(AuthToken.token == token).first()
+    if not row:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+
+    if row.principal_type not in ("user", "admin"):
+        raise HTTPException(status_code=401, detail="Invalid token principal_type")
+
+    return Principal(type=row.principal_type, id=row.principal_id)
+
+
+def require_admin(principal: Principal) -> Principal:
+    if principal.type != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    return principal
+
+
+def require_user(principal: Principal) -> Principal:
+    if principal.type != "user":
+        raise HTTPException(status_code=403, detail="User required")
+    return principal
+
+
+def mint_token(db: Session, principal_type: PrincipalType, principal_id: str) -> str:
+    token = secrets.token_urlsafe(32)
+    db.add(AuthToken(token=token, principal_type=principal_type, principal_id=principal_id))
+    return token

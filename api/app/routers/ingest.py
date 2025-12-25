@@ -1,127 +1,171 @@
+
+from __future__ import annotations
+
+import base64
+import datetime as dt
+import json
+from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
 from sqlalchemy.orm import Session
-from datetime import datetime
-import base64, json, re
 
-from app.db import SessionLocal
-from app.models import Application, JobDescription, StoredFile, BaseResume, User
-from app.auth import require_extension_token
-from app.docx_render import render_resume
-from app.storage import save_bytes
-from app.ai import client
+from ..auth import Principal, get_db, get_principal
+from ..models import AdminUser, Application, BaseResume, StoredFile
+from ..storage import save_bytes
+from ..docx_render import render_resume
 
-router = APIRouter()
 
-def get_db():
-    db = SessionLocal()
+router = APIRouter(prefix="/v1", tags=["ingest"])
+
+
+def _admin_user_ids(db: Session, admin_id: str) -> List[str]:
+    return [r.user_id for r in db.query(AdminUser).filter(AdminUser.admin_id == admin_id).all()]
+
+
+def _ensure_access(db: Session, principal: Principal, user_id: str) -> None:
+    if principal.type == "user":
+        if principal.id != user_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        return
+    # admin
+    ok = db.query(AdminUser).filter(AdminUser.admin_id == principal.id, AdminUser.user_id == user_id).first()
+    if not ok:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+def _load_base_resume_context(db: Session, user_id: str) -> Dict[str, Any]:
+    br = db.query(BaseResume).filter(BaseResume.user_id == user_id).order_by(BaseResume.created_at.desc()).first()
+    if not br or not br.content_text:
+        return {}
+    txt = br.content_text.strip()
     try:
-        yield db
-    finally:
-        db.close()
-
-class ApplyIn(BaseModel):
-    user_id: str = Field(..., min_length=1)
-    url: str = Field(..., min_length=5)
-    company: str = Field(..., min_length=1)
-    position: str = Field(..., min_length=1)
-    jd_text: str = Field(..., min_length=50)
-
-def safe_filename(s: str) -> str:
-    s = re.sub(r"[^\w\- ]+", "", s).strip()
-    s = re.sub(r"\s+", "_", s)
-    return s[:80] if s else "Document"
-
-@router.post("/ingest/apply-and-generate", dependencies=[Depends(require_extension_token)])
-def apply_and_generate(p: ApplyIn, db: Session = Depends(get_db)):
-    # ensure user exists
-    if not db.get(User, p.user_id):
-        db.add(User(id=p.user_id))
-        db.commit()
-
-    base = db.get(BaseResume, p.user_id)
-    if not base:
-        raise HTTPException(400, "Base resume not set for user. PUT /v1/users/{user_id}/base-resume first.")
-
-    # upsert application by (user_id, url)
-    app = (
-        db.query(Application)
-        .filter(Application.user_id == p.user_id, Application.url == p.url)
-        .first()
-    )
-    if not app:
-        app = Application(user_id=p.user_id, company=p.company, role=p.position, url=p.url, stage="applied")
-        db.add(app)
-        db.commit()
-        db.refresh(app)
-    else:
-        app.company = p.company
-        app.role = p.position
-        db.commit()
-
-    # store JD
-    db.add(JobDescription(user_id=p.user_id, application_id=app.id, jd_text=p.jd_text))
-    db.commit()
-
-    # Ask for strict JSON for your template placeholders
-    prompt = f"""You are a resume tailoring system.
-Return STRICT JSON only (no markdown, no commentary).
-Keys required:
-- SUMMARY: string
-- SKILLS: string (comma-separated)
-- EXP_COMPANY_1: string
-- EXP_COMPANY_2: string
-- EXP_COMPANY_3: string
-- EXP_COMPANY_4: string
-
-Rules:
-- Use ONLY facts from BASE RESUME. Do NOT invent companies, titles, dates.
-- Tailor wording to the JOB DESCRIPTION with relevant keywords.
-- Each EXP_COMPANY_n should be 3-6 bullets separated by '\n' and starting with '• '.
-
-JOB DESCRIPTION:
-{p.jd_text}
-
-BASE RESUME:
-{base.content_text}
-""".strip()
-
-    resp = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-    )
-
-    raw = resp.choices[0].message.content.strip()
-    try:
-        data = json.loads(raw)
+        return json.loads(txt)
     except Exception:
-        raise HTTPException(500, f"Model did not return valid JSON. Raw: {raw[:400]}")
+        return {"base_resume_text": txt}
 
-    # Render DOCX using your template
-    docx_bytes = render_resume(data)
 
-    company_fn = safe_filename(p.company)
-    role_fn = safe_filename(p.position)
-    filename = f"Resume_{company_fn}_{role_fn}.docx"
-    path = save_bytes(p.user_id, app.id, filename, docx_bytes)
+class ApplyAndGenerateIn(BaseModel):
+    user_id: str
+    url: str
+    company: str
+    position: str
+    jd_text: str
 
-    sf = StoredFile(
-        user_id=p.user_id,
-        application_id=app.id,
-        kind="resume_docx",
-        path=path,
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        filename=filename,
-        created_at=datetime.utcnow(),
-    )
-    db.add(sf)
+
+@router.post("/ingest/apply-and-generate")
+def apply_and_generate(
+    payload: ApplyAndGenerateIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    _ensure_access(db, principal, payload.user_id)
+
+    now = dt.datetime.utcnow()
+    # idempotent by (user_id, url)
+    existing = db.query(Application).filter(Application.user_id == payload.user_id, Application.url == payload.url).order_by(Application.created_at.desc()).first()
+    if existing:
+        app_row = existing
+    else:
+        app_id = f"app{now.strftime('%Y%m%d%H%M%S')}{now.microsecond}"
+        app_row = Application(
+            id=app_id,
+            user_id=payload.user_id,
+            url=payload.url,
+            company=payload.company,
+            role=payload.position,
+            stage="applied",
+            created_at=now,
+            updated_at=now,
+            created_by_type=principal.type,
+            created_by_id=principal.id,
+        )
+        db.add(app_row)
+
+    # render docx
+    ctx = _load_base_resume_context(db, payload.user_id)
+    ctx = {**ctx, "target_company": payload.company, "target_role": payload.position, "job_url": payload.url, "job_description": payload.jd_text}
+
+    docx_bytes = render_resume(ctx)
+
+    file_id = f"file{now.strftime('%Y%m%d%H%M%S')}{now.microsecond}"
+    rel_path = save_bytes(file_id + ".docx", docx_bytes)
+    stored = StoredFile(id=file_id, path=rel_path, filename="resume.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", created_at=now)
+    db.add(stored)
+    app_row.resume_docx_file_id = file_id
     db.commit()
-    db.refresh(sf)
 
     return {
-        "application_id": app.id,
-        "resume_docx_file_id": sf.id,
-        "resume_docx_base64": base64.b64encode(docx_bytes).decode("ascii"),
-        "resume_download_url": f"/v1/files/{sf.id}",
+        "application_id": app_row.id,
+        "resume_docx_file_id": file_id,
+        "resume_download_url": f"/v1/files/{file_id}/download",
+        "resume_docx_base64": base64.b64encode(docx_bytes).decode("utf-8"),
     }
+
+
+class ApplyAndGenerateBatchIn(BaseModel):
+    url: str
+    company: str
+    position: str
+    jd_text: str
+
+
+@router.post("/ingest/apply-and-generate/batch")
+def apply_and_generate_batch(
+    payload: ApplyAndGenerateBatchIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    if principal.type != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+
+    user_ids = _admin_user_ids(db, principal.id)
+    now = dt.datetime.utcnow()
+    results = []
+    for uid in user_ids:
+        try:
+            # create per-user
+            existing = db.query(Application).filter(Application.user_id == uid, Application.url == payload.url).order_by(Application.created_at.desc()).first()
+            if existing:
+                app_row = existing
+            else:
+                app_id = f"app{dt.datetime.utcnow().strftime('%Y%m%d%H%M%S')}{dt.datetime.utcnow().microsecond}"
+                app_row = Application(
+                    id=app_id,
+                    user_id=uid,
+                    url=payload.url,
+                    company=payload.company,
+                    role=payload.position,
+                    stage="applied",
+                    created_at=dt.datetime.utcnow(),
+                    updated_at=dt.datetime.utcnow(),
+                    created_by_type=principal.type,
+                    created_by_id=principal.id,
+                )
+                db.add(app_row)
+
+            ctx = _load_base_resume_context(db, uid)
+            ctx = {**ctx, "target_company": payload.company, "target_role": payload.position, "job_url": payload.url, "job_description": payload.jd_text}
+            docx_bytes = render_resume(ctx)
+
+            file_id = f"file{dt.datetime.utcnow().strftime('%Y%m%d%H%M%S')}{dt.datetime.utcnow().microsecond}"
+            rel_path = save_bytes(file_id + ".docx", docx_bytes)
+            stored = StoredFile(id=file_id, path=rel_path, filename="resume.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", created_at=dt.datetime.utcnow())
+            db.add(stored)
+            app_row.resume_docx_file_id = file_id
+            db.flush()
+
+            results.append({
+                "ok": True,
+                "user_id": uid,
+                "application_id": app_row.id,
+                "resume_docx_file_id": file_id,
+                "resume_download_url": f"/v1/files/{file_id}/download",
+                "resume_docx_base64": base64.b64encode(docx_bytes).decode("utf-8"),
+            })
+        except Exception as e:
+            results.append({"ok": False, "user_id": uid, "error": str(e)})
+
+    db.commit()
+    return {"results": results}
