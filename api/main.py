@@ -6,6 +6,7 @@ from app.routers.ingest import router as ingest_router
 from app.routers.files import router as files_router
 from app.routers.base_resume import router as base_resume_router
 from app.routers.applications import router as applications_router
+from app.routers.users import router as users_router
 
 app = FastAPI(title="CareerOS Backend (DOCX + Files + Multi-user)")
 

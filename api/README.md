@@ -49,3 +49,10 @@ If you upgraded from an older zip, the app will auto-add missing columns (like a
 - GET /v1/applications/paged?user_id=u1&page=1&page_size=50&q=google&stage=interview&date_from=2025-12-01&date_to=2025-12-31
 - GET /v1/applications/kanban?user_id=u1&stage=applied&page=1&page_size=50&q=amazon
 - GET /v1/applications/stats?user_id=u1&days=60
+
+## SQLite schema mismatch fix
+If you see: `table stored_files has no column named filename`, run:
+
+- `python migrate_sqlite.py`
+
+Or delete your sqlite DB file to recreate it (data loss).
