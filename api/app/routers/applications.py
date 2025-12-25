@@ -35,6 +35,33 @@ class ApplicationUpdateIn(BaseModel):
 
 
 
+
+@router.get("/applications/exists")
+def application_exists(user_id: str, url: str, db: Session = Depends(get_db)):
+    """Check if an application already exists for this user+url."""
+    u = (url or "").strip()
+    # normalize a little to reduce false negatives
+    if u.endswith("/"):
+        u = u[:-1]
+    q = db.query(Application).filter(Application.user_id == user_id)
+    q = q.filter(Application.url == u)
+    item = q.order_by(Application.created_at.desc()).first()
+    print("application_exists:", user_id, url, "found:", bool(item))
+    if not item:
+        return {"exists": False}
+    return {
+        "exists": True,
+        "application": {
+            "id": item.id,
+            "company": item.company,
+            "role": item.role,
+            "url": item.url,
+            "stage": item.stage,
+            "created_at": item.created_at.isoformat() if item.created_at else None,
+            "updated_at": item.updated_at.isoformat() if getattr(item, "updated_at", None) else None,
+        },
+    }
+
 @router.get("/applications/stats", dependencies=[Depends(require_extension_token)])
 def applications_stats(
     user_id: str | None = Query(default=None),
@@ -158,7 +185,7 @@ def list_applications_paged(
             Application.role.ilike(like) |
             Application.url.ilike(like)
         )
-    print(qset)
+
     def _parse(d: str):
         return datetime.fromisoformat(d).replace(tzinfo=timezone.utc) if "T" in d else datetime.fromisoformat(d + "T00:00:00").replace(tzinfo=timezone.utc)
 
