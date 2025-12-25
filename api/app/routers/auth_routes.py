@@ -1,191 +1,130 @@
+
 from __future__ import annotations
-from fastapi import APIRouter, Depends, HTTPException, Header
-from pydantic import BaseModel, Field
+
+import datetime as dt
+
+from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
-from datetime import datetime
-import secrets, hashlib, hmac, base64
 
-from ..db import SessionLocal
-from ..models import AuthCredential, AuthToken, Admin, User
-from ..auth import get_principal, Principal
+from ..auth import Principal, get_db, get_principal, mint_token
+from ..models import Admin, AdminUser, AuthCredential, AuthToken, User
+from ..security import hash_password, verify_password
 
-router = APIRouter()
+router = APIRouter(prefix="/v1", tags=["auth"])
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
-# --- password hashing (stdlib-only) ---
-def _hash_password(password: str, *, salt: bytes | None = None, iterations: int = 210_000) -> str:
-    if salt is None:
-        salt = secrets.token_bytes(16)
-    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations, dklen=32)
-    return "pbkdf2_sha256$%d$%s$%s" % (
-        iterations,
-        base64.urlsafe_b64encode(salt).decode("ascii").rstrip("="),
-        base64.urlsafe_b64encode(dk).decode("ascii").rstrip("="),
-    )
-
-def _verify_password(password: str, encoded: str) -> bool:
-    try:
-        algo, it_s, salt_s, hash_s = encoded.split("$", 3)
-        if algo != "pbkdf2_sha256":
-            return False
-        iterations = int(it_s)
-        salt = base64.urlsafe_b64decode(salt_s + "==")
-        expected = base64.urlsafe_b64decode(hash_s + "==")
-        dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations, dklen=len(expected))
-        return hmac.compare_digest(dk, expected)
-    except Exception:
-        return False
-
-def _issue_token(db: Session, principal_type: str, principal_id: str) -> str:
-    token = secrets.token_urlsafe(32)
-    db.add(AuthToken(token=token, principal_type=principal_type, principal_id=principal_id, created_at=datetime.utcnow()))
-    db.commit()
-    return token
-
-class SignupIn(BaseModel):
-    email: str
-    password: str = Field(..., min_length=6, max_length=128)
-    account_type: str = Field(..., pattern="^(admin|user)$")
-    first_name: str = Field(..., min_length=1, max_length=80)
-    last_name: str = Field(..., min_length=1, max_length=80)
-    dob: str | None = None  # ISO date string YYYY-MM-DD
-
-    # For user signup: choose admin by id OR email OR name
+class MeOut(BaseModel):
+    type: str
     admin_id: str | None = None
-    admin_email: str | None = None
-    admin_name: str | None = None
-    user_id: str | None = None  # optional custom user id (else random)
+    user_id: str | None = None
 
-class LoginIn(BaseModel):
-    email: str
-    password: str
 
-@router.post("/auth/signup")
-def signup(p: SignupIn, db: Session = Depends(get_db)):
-    # prevent duplicate emails
-    existing = db.query(AuthCredential).filter(AuthCredential.email == str(p.email)).first()
-    if existing:
-        raise HTTPException(400, "Email already registered")
+@router.get("/me", response_model=MeOut)
+def me(principal: Principal = Depends(get_principal)) -> MeOut:
+    if principal.type == "admin":
+        return MeOut(type="admin", admin_id=principal.id)
+    return MeOut(type="user", user_id=principal.id)
 
-    def resolve_admin_id() -> str | None:
-        if p.admin_id:
-            a = db.query(Admin).filter(Admin.id == p.admin_id).first()
-            if not a:
-                raise HTTPException(400, "admin_id not found")
-            return a.id
-        if p.admin_email:
-            c = db.query(AuthCredential).filter(
-                AuthCredential.email == str(p.admin_email),
-                AuthCredential.principal_type == "admin",
-            ).first()
-            if not c:
-                raise HTTPException(400, "admin_email not found")
-            return c.principal_id
-        if p.admin_name:
-            # exact match; you can change to LIKE if you want partial search
-            matches = db.query(Admin).filter(Admin.name == str(p.admin_name)).all()
-            if not matches:
-                raise HTTPException(400, "admin_name not found")
-            if len(matches) > 1:
-                raise HTTPException(400, "admin_name is ambiguous; use admin email instead")
-            return matches[0].id
-        return None
-
-    if p.account_type == "admin":
-        admin_id = "a_" + secrets.token_hex(4)
-        db.add(Admin(
-            id=admin_id,
-            name=str(p.email),
-            first_name=p.first_name,
-            last_name=p.last_name,
-            dob=p.dob,
-        ))
-        db.commit()
-        principal_type, principal_id = "admin", admin_id
-    else:
-        user_id = (p.user_id or ("u_" + secrets.token_hex(4))).strip()
-        admin_id = resolve_admin_id()
-        if not admin_id:
-            raise HTTPException(400, "For user signup, you must select an admin (by email or name).")
-
-        u = db.query(User).filter(User.id == user_id).first()
-        if u:
-            raise HTTPException(400, "user_id already exists")
-
-        db.add(User(
-            id=user_id,
-            admin_id=admin_id,
-            name=str(p.email),
-            first_name=p.first_name,
-            last_name=p.last_name,
-            dob=p.dob,
-        ))
-        db.commit()
-        principal_type, principal_id = "user", user_id
-
-    cred = AuthCredential(
-        email=str(p.email),
-        password_hash=_hash_password(p.password),
-        principal_type=principal_type,
-        principal_id=principal_id,
-        created_at=datetime.utcnow(),
-    )
-    db.add(cred)
-    db.commit()
-
-    token = _issue_token(db, principal_type, principal_id)
-    return {"ok": True, "token": token, "principal": {"type": principal_type, "id": principal_id}}
 
 @router.get("/admins/public")
 def list_admins_public(db: Session = Depends(get_db)):
-    # Returns admins with a display label + the email (from credential) when available
-    admins = db.query(Admin).order_by(Admin.name.asc()).all()
-    out = []
-    for a in admins:
-        cred = db.query(AuthCredential).filter(AuthCredential.principal_type == "admin", AuthCredential.principal_id == a.id).first()
-        out.append({
-            "id": a.id,
-            "name": a.name,
-            "email": cred.email if cred else None,
-            "first_name": a.first_name,
-            "last_name": a.last_name,
-        })
-    return {"items": out}
+    items = db.query(Admin).order_by(Admin.created_at.desc()).all()
+    return {"items": [{"id": a.id, "name": a.name} for a in items]}
+
+
+class SignupIn(BaseModel):
+    role: str = Field(pattern="^(user|admin)$")
+    email: EmailStr
+    password: str = Field(min_length=6)
+    firstname: str | None = None
+    lastname: str | None = None
+    dob: str | None = None
+
+    # If role == user, you can link to multiple admins
+    admin_ids: list[str] | None = None
+    # Backward-compat single selection
+    admin_id: str | None = None
+
+
+@router.post("/auth/signup")
+def signup(payload: SignupIn, db: Session = Depends(get_db)):
+    email = payload.email.lower().strip()
+    exists = db.query(AuthCredential).filter(AuthCredential.email == email).first()
+    if exists:
+        raise HTTPException(status_code=409, detail="Email already registered")
+
+    now = dt.datetime.utcnow()
+
+    if payload.role == "admin":
+        admin_id = f"a{now.strftime('%Y%m%d%H%M%S')}{now.microsecond}"
+        admin = Admin(id=admin_id, name=f"{payload.firstname or ''} {payload.lastname or ''}".strip() or "Admin", created_at=now, updated_at=now)
+        db.add(admin)
+
+        db.add(AuthCredential(email=email, password_hash=hash_password(payload.password), principal_type="admin", principal_id=admin_id, created_at=now))
+        token = mint_token(db, "admin", admin_id)
+        db.commit()
+        return {"token": token, "principal": {"type": "admin", "admin_id": admin_id}}
+
+    # role user
+    user_id = f"u{now.strftime('%Y%m%d%H%M%S')}{now.microsecond}"
+    user = User(
+        id=user_id,
+        name=f"{payload.firstname or ''} {payload.lastname or ''}".strip() or None,
+        firstname=payload.firstname,
+        lastname=payload.lastname,
+        dob=payload.dob,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(user)
+    db.add(AuthCredential(email=email, password_hash=hash_password(payload.password), principal_type="user", principal_id=user_id, created_at=now))
+
+    admin_ids = set(payload.admin_ids or [])
+    if payload.admin_id:
+        admin_ids.add(payload.admin_id)
+
+    # validate admins exist (optional strict)
+    if admin_ids:
+        existing_admin_ids = {a.id for a in db.query(Admin).filter(Admin.id.in_(list(admin_ids))).all()}
+        missing = sorted(list(admin_ids - existing_admin_ids))
+        if missing:
+            raise HTTPException(status_code=400, detail={"message": "Some admins not found", "missing_admin_ids": missing})
+
+        for aid in existing_admin_ids:
+            db.add(AdminUser(admin_id=aid, user_id=user_id, created_at=now))
+
+    token = mint_token(db, "user", user_id)
+    db.commit()
+    return {"token": token, "principal": {"type": "user", "user_id": user_id}}
+
+
+class LoginIn(BaseModel):
+    email: EmailStr
+    password: str
+
 
 @router.post("/auth/login")
-def login(p: LoginIn, db: Session = Depends(get_db)):
-    cred = db.query(AuthCredential).filter(AuthCredential.email == str(p.email)).first()
-    if not cred or not _verify_password(p.password, cred.password_hash):
-        raise HTTPException(401, "Invalid email or password")
+def login(payload: LoginIn, db: Session = Depends(get_db)):
+    email = payload.email.lower().strip()
+    cred = db.query(AuthCredential).filter(AuthCredential.email == email).first()
+    if not cred or not verify_password(payload.password, cred.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    token = _issue_token(db, cred.principal_type, cred.principal_id)
-    return {"ok": True, "token": token, "principal": {"type": cred.principal_type, "id": cred.principal_id}}
+    token = mint_token(db, cred.principal_type, cred.principal_id)
+    db.commit()
+    if cred.principal_type == "admin":
+        return {"token": token, "principal": {"type": "admin", "admin_id": cred.principal_id}}
+    return {"token": token, "principal": {"type": "user", "user_id": cred.principal_id}}
+
 
 @router.post("/auth/logout")
 def logout(
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
     x_auth_token: str | None = Header(default=None, alias="X-Auth-Token"),
-    authorization: str | None = Header(default=None, alias="Authorization"),
 ):
-    # revoke current token if present
-    token = x_auth_token
-    if not token and authorization and authorization.lower().startswith("bearer "):
-        token = authorization.split(" ", 1)[1].strip()
-    if not token:
-        raise HTTPException(400, "No token provided")
-    db.query(AuthToken).filter(AuthToken.token == token).delete()
+    if not x_auth_token:
+        return {"ok": True}
+    db.query(AuthToken).filter(AuthToken.token == x_auth_token.strip()).delete()
     db.commit()
     return {"ok": True}
-
-@router.get("/me")
-def me(principal: Principal = Depends(get_principal), db: Session = Depends(get_db)):
-    if principal["type"] == "admin":
-        return {"type": "admin", "admin_id": principal["admin_id"]}
-    return {"type": "user", "user_id": principal["user_id"]}

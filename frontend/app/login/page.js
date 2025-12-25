@@ -1,60 +1,62 @@
+
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, setToken } from "../lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@local");
-  const [password, setPassword] = useState("admin123");
-  const [err, setErr] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [status, setStatus] = useState("");
 
   async function onSubmit(e) {
     e.preventDefault();
-    setLoading(true);
-    setErr("");
+    setStatus("Logging in...");
     try {
       const res = await api("/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
       setToken(res.token);
+      setStatus("✅ Logged in");
       router.push("/dashboard");
-    } catch (e) {
-      setErr(String(e?.message || e));
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      setStatus(String(err?.message || err));
     }
   }
 
   return (
-    <div className="authCard">
-      <div className="authTitle">Login</div>
-      <div className="authSubtitle">Use your account to manage applications and generate documents.</div>
-
-      <form onSubmit={onSubmit}>
-        <div className="authRow">
-          <label>Email</label>
-          <input value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="you@domain.com" />
+    <main className="authShell">
+      <div className="authBg" aria-hidden="true" />
+      <div className="authCard">
+        <div className="authBrand">
+          <div className="authMark" />
+          <div>
+            <div className="authTitle">CareerOS</div>
+            <div className="authSub">Sign in to manage applications & generate docs</div>
+          </div>
         </div>
 
-        <div className="authRow">
-          <label>Password</label>
-          <input type="password" value={password} onChange={(e)=>setPassword(e.target.value)} />
-        </div>
+        <form onSubmit={onSubmit} className="authForm">
+          <label className="authLabel">Email</label>
+          <input className="authInput" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
 
-        {err ? <div className="authErr">{err}</div> : null}
+          <label className="authLabel">Password</label>
+          <input className="authInput" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
 
-        <button className="authBtn" type="submit" disabled={loading}>
-          {loading ? "Signing in…" : "Login"}
-        </button>
+          <button className="authBtn authBtnPrimary" type="submit">Login</button>
 
-        <div className="authLink">
-          No account? <a href="/signup">Create one</a>
-        </div>
-      </form>
-    </div>
+          {status ? <div className={status.startsWith("✅") ? "authOk" : "authErr"}>{status}</div> : null}
+
+          <div className="authFoot">
+            <span>New here?</span>
+            <Link href="/signup">Create an account</Link>
+          </div>
+        </form>
+      </div>
+    </main>
   );
 }

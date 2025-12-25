@@ -1,119 +1,91 @@
+
 "use client";
 
-import { useEffect, useMemo, useState, createContext, useContext } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import Topbar from "./Topbar";
-import { api, getToken } from "../lib/api";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import Sidebar from "./Sidebar";
+import { api, getToken, setToken } from "../lib/api";
 
-const ScopeCtx = createContext(null);
-export function useScope() { return useContext(ScopeCtx); }
+const ScopeContext = createContext(null);
 
-function Sidebar() {
-  return (
-    <aside className="sidebar">
-      <div className="brand">
-        <div className="logo" />
-        <div>
-          <h1>CareerOS</h1>
-          <p>Track → Analyze → Win</p>
-        </div>
-      </div>
-
-      <div className="nav">
-        <a href="/dashboard">Dashboard</a>
-        <a href="/applications">Applications</a>
-        <a href="/assistant">Assistant</a>
-        <a href="/documents">Documents</a>
-      </div>
-
-      <div style={{ marginTop: 16 }} className="card cardPad">
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>Tip</div>
-        <div className="muted">
-          Use the header selector to view <strong>All users</strong> or one user.
-        </div>
-      </div>
-    </aside>
-  );
+export function useScope() {
+  const ctx = useContext(ScopeContext);
+  if (!ctx) throw new Error("useScope must be used within <ClientShell/>");
+  return ctx;
 }
 
 export default function ClientShell({ children }) {
-  const router = useRouter();
-  const pathname = usePathname();
-
-  const [principal, setPrincipal] = useState(null);
+  const [mounted, setMounted] = useState(false);
+  const [principal, setPrincipal] = useState(null); // {type, admin_id/user_id}
   const [users, setUsers] = useState([]);
-  const [scope, setScope] = useState(() => {
-    if (typeof window === "undefined") return { mode: "all", userId: null };
-    const v = localStorage.getItem("careeros_scope") || "all";
-    return v === "all" ? { mode: "all", userId: null } : { mode: "user", userId: v };
-  });
+  const [scope, setScope] = useState({ mode: "all", userId: null }); // admin-only
+  const [loading, setLoading] = useState(false);
 
+  // Hydration-safe init
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem("careeros_scope", scope.mode === "all" ? "all" : (scope.userId || "all"));
-  }, [scope]);
+    setMounted(true);
+    const savedScope = localStorage.getItem("careeros_scope");
+    if (savedScope) {
+      try {
+        const s = JSON.parse(savedScope);
+        if (s?.mode === "user" && s?.userId) setScope({ mode: "user", userId: s.userId });
+        else setScope({ mode: "all", userId: null });
+      } catch {}
+    }
+  }, []);
 
-  const isAuthPage = pathname === "/login" || pathname === "/signup";
-
+  // Load principal/users once token exists
   useEffect(() => {
-    const token = getToken();
-    if (!token && !isAuthPage) {
-      router.push("/login");
+    if (!mounted) return;
+    const tok = getToken();
+    if (!tok) {
+      setPrincipal(null);
+      setUsers([]);
       return;
     }
-    if (token && isAuthPage) {
-      router.push("/dashboard");
-      return;
-    }
-  }, [isAuthPage, router]);
-
-  useEffect(() => {
     (async () => {
-      const token = getToken();
-      if (!token) return;
+      setLoading(true);
       try {
         const me = await api("/v1/me");
         setPrincipal(me);
-
         const u = await api("/v1/users");
         const items = Array.isArray(u) ? u : (u.items || u.users || []);
         setUsers(items);
-
-        if (me.type === "user") {
-          setScope({ mode: "user", userId: me.user_id });
-          localStorage.setItem("careeros_scope", me.user_id);
-        } else {
-          if (scope.mode === "user") {
-            const ok = items.some(x => String(x.id) === String(scope.userId));
-            if (!ok) setScope({ mode: "all", userId: null });
-          }
-        }
       } catch (e) {
-        router.push("/login");
+        // token invalid; reset
+        setToken("");
+        setPrincipal(null);
+        setUsers([]);
+      } finally {
+        setLoading(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mounted]);
 
-  const value = useMemo(() => ({ principal, setPrincipal, users, setUsers, scope, setScope }), [principal, users, scope]);
+  useEffect(() => {
+    if (!mounted) return;
+    localStorage.setItem("careeros_scope", JSON.stringify(scope));
+  }, [mounted, scope]);
 
-  if (isAuthPage) {
-    return (
-      <ScopeCtx.Provider value={value}>
-        <div className="authShell">{children}</div>
-      </ScopeCtx.Provider>
-    );
-  }
+  const value = useMemo(
+    () => ({
+      mounted,
+      loading,
+      principal,
+      setPrincipal,
+      users,
+      setUsers,
+      scope,
+      setScope,
+    }),
+    [mounted, loading, principal, users, scope]
+  );
 
   return (
-    <ScopeCtx.Provider value={value}>
+    <ScopeContext.Provider value={value}>
       <div className="shell">
         <Sidebar />
-        <main className="main">
-          <Topbar />
-          {children}
-        </main>
+        <main className="main">{children}</main>
       </div>
-    </ScopeCtx.Provider>
+    </ScopeContext.Provider>
   );
 }

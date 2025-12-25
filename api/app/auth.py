@@ -1,57 +1,69 @@
-import os
-from typing import Literal, TypedDict, Optional
-from fastapi import Header, HTTPException, Depends
+
+from __future__ import annotations
+
+import secrets
+from dataclasses import dataclass
+from typing import Generator, Literal, Optional
+
+from fastapi import Header, HTTPException
 from sqlalchemy.orm import Session
 
 from .db import SessionLocal
-from .models import AuthToken, User
+from .models import AuthToken
 
-class Principal(TypedDict, total=False):
-    type: Literal["admin","user"]
-    admin_id: str
-    user_id: str
 
-def get_db():
+PrincipalType = Literal["user", "admin"]
+
+
+@dataclass
+class Principal:
+    type: PrincipalType
+    id: str  # user_id or admin_id
+
+
+def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
-def get_principal(
-    db: Session = Depends(get_db),
-    x_auth_token: str = Header(default=""),
-    x_extension_token: str = Header(default=""),
-) -> Principal:
-    # Dev convenience: AUTH_DISABLED=1 -> act as admin a1
-    if os.getenv("AUTH_DISABLED","").strip() == "1":
-        return {"type":"admin","admin_id":"a1"}
 
-    token = (x_auth_token or x_extension_token or "").strip()
-    if not token:
-        raise HTTPException(401, "Missing auth token")
+def _token_from_header(x_auth_token: Optional[str]) -> str:
+    if not x_auth_token:
+        raise HTTPException(status_code=401, detail="Missing X-Auth-Token")
+    return x_auth_token.strip()
+
+
+def get_principal(
+    db: Session,
+    x_auth_token: Optional[str] = Header(default=None, alias="X-Auth-Token"),
+) -> Principal:
+    token = _token_from_header(x_auth_token)
 
     row = db.query(AuthToken).filter(AuthToken.token == token).first()
     if not row:
-        raise HTTPException(401, "Invalid auth token")
+        raise HTTPException(status_code=401, detail="Invalid auth token")
 
-    if row.principal_type == "admin":
-        return {"type":"admin","admin_id":row.principal_id}
-    if row.principal_type == "user":
-        # ensure user exists
-        u = db.query(User).filter(User.id == row.principal_id).first()
-        if not u:
-            raise HTTPException(401, "User for token not found")
-        return {"type":"user","user_id":u.id}
-    raise HTTPException(401, "Invalid principal type")
+    if row.principal_type not in ("user", "admin"):
+        raise HTTPException(status_code=401, detail="Invalid token principal_type")
 
-def assert_user_access(principal: Principal, user_id: str, db: Session) -> None:
-    return
-    if principal["type"] == "user":
-        if principal["user_id"] != user_id:
-            raise HTTPException(403, "Forbidden for this user_id")
-        return
-    # admin: check user belongs to admin
-    u = db.query(User).filter(User.id == user_id).first()
-    if not u or u.admin_id != principal["admin_id"]:
-        raise HTTPException(403, "Forbidden for this user_id")
+    return Principal(type=row.principal_type, id=row.principal_id)
+
+
+def require_admin(principal: Principal) -> Principal:
+    if principal.type != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    return principal
+
+
+def require_user(principal: Principal) -> Principal:
+    if principal.type != "user":
+        raise HTTPException(status_code=403, detail="User required")
+    return principal
+
+
+def mint_token(db: Session, principal_type: PrincipalType, principal_id: str) -> str:
+    token = secrets.token_urlsafe(32)
+    db.add(AuthToken(token=token, principal_type=principal_type, principal_id=principal_id))
+    return token

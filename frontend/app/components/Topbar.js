@@ -1,19 +1,25 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { api, setToken, getToken } from "../lib/api";
 import { useScope } from "./ClientShell";
 
-export default function Topbar() {
+export default function Topbar({ title = "CareerOS", subtitle = "Application analytics + document generator" }) {
   const router = useRouter();
-  const { principal, setPrincipal, users, setUsers, scope, setScope } = useScope();
+  const { mounted, principal, setPrincipal, users, setUsers, scope, setScope } = useScope();
   const [err, setErr] = useState("");
 
+  // Refresh principal/users on mount (ClientShell already does, but this keeps Topbar resilient)
   useEffect(() => {
+    if (!mounted) return;
     (async () => {
       try {
         setErr("");
+        const tok = getToken();
+        if (!tok) return;
         const me = await api("/v1/me");
         setPrincipal(me);
         const u = await api("/v1/users");
@@ -24,13 +30,12 @@ export default function Topbar() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [mounted]);
 
   async function onLogout() {
     try {
-      // best-effort server logout
       await api("/v1/auth/logout", { method: "POST" });
-    } catch (e) {}
+    } catch {}
     setToken("");
     localStorage.removeItem("careeros_scope");
     setPrincipal(null);
@@ -39,13 +44,28 @@ export default function Topbar() {
     router.push("/login");
   }
 
+  // Hydration-safe: never branch on localStorage during SSR / first render
+  if (!mounted) {
+    return (
+      <div className="topbar">
+        <div className="topLeft">
+          <div className="topTitle">{title}</div>
+          <div className="topSub">{subtitle}</div>
+        </div>
+        <div className="topRight">
+          <div className="pill">Loading…</div>
+        </div>
+      </div>
+    );
+  }
+
   const token = getToken();
 
   return (
     <div className="topbar">
       <div className="topLeft">
-        <div className="topTitle">CareerOS</div>
-        <div className="topSub">Application analytics + document generator</div>
+        <div className="topTitle">{title}</div>
+        <div className="topSub">{subtitle}</div>
       </div>
 
       <div className="topRight">
@@ -78,7 +98,7 @@ export default function Topbar() {
             <button className="pill pillBtn" onClick={onLogout}>Logout</button>
           </>
         ) : (
-          token ? <div className="pill">Loading…</div> : <a className="pill pillBtn" href="/login">Login</a>
+          token ? <div className="pill">Loading…</div> : <Link className="pill pillBtn" href="/login">Login</Link>
         )}
       </div>
     </div>

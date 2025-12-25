@@ -1,64 +1,40 @@
-'use client';
 
-const DEFAULT_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
-
-export function getApiBase() {
-  if (typeof window !== "undefined") {
-    const v = window.localStorage.getItem("careeros_api_base");
-    if (v && v.startsWith("http")) return v.replace(/\/$/, "");
-  }
-  return DEFAULT_BASE.replace(/\/$/, "");
-}
-
-export function getScopeUserId() {
-  if (typeof window === "undefined") return null;
-  const v = localStorage.getItem("careeros_scope") || "all";
-  return v === "all" ? null : v;
-}
+const DEFAULT_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
 
 export function getToken() {
-  if (typeof window !== "undefined") {
-    const t = window.localStorage.getItem("careeros_token");
-    if (t) return t;
-  }
-  // no token by default; use login/signup
-  return "";
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("careeros_token") || "";
 }
 
 export function setToken(token) {
   if (typeof window === "undefined") return;
-  if (!token) {
-    window.localStorage.removeItem("careeros_token");
-  } else {
-    window.localStorage.setItem("careeros_token", token);
-  }
+  if (!token) localStorage.removeItem("careeros_token");
+  else localStorage.setItem("careeros_token", token);
 }
 
-export async function apiFetch(path, init = {}) {
-  const base = getApiBase();
-  const token = getToken();
-  const headers = {
-    ...(init.headers || {}),
-  };
+export async function api(path, options = {}) {
+  const base = DEFAULT_BASE;
+  const url = path.startsWith("http") ? path : base + path;
 
-  // If body is not FormData and Content-Type not set, default to JSON
-  const isForm = (typeof FormData !== "undefined") && (init.body instanceof FormData);
-  if (!isForm && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+  const headers = new Headers(options.headers || {});
+  if (!headers.has("Content-Type") && options.body) headers.set("Content-Type", "application/json");
 
-  if (token) headers["X-Auth-Token"] = token;
+  const tok = getToken();
+  if (tok) headers.set("X-Auth-Token", tok);
 
-  const res = await fetch(`${base}${path}`, { ...init, headers });
-
-  const text = await res.text();
+  const res = await fetch(url, { ...options, headers, cache: "no-store" });
+  const ct = res.headers.get("content-type") || "";
   let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-
+  if (ct.includes("application/json")) {
+    data = await res.json().catch(() => null);
+  } else {
+    data = await res.text().catch(() => "");
+  }
   if (!res.ok) {
-    const msg = (data && (data.detail || data.message)) ? (data.detail || data.message) : `HTTP ${res.status}`;
-    throw new Error(msg);
+    const msg = typeof data === "string" ? data : (data?.detail || data?.message || JSON.stringify(data));
+    throw new Error(msg || `HTTP ${res.status}`);
   }
   return data;
 }
 
-// simple alias
-export const api = apiFetch;
+export const apiFetch = api;
