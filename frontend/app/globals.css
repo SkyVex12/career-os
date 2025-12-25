@@ -82,3 +82,55 @@ a:hover{text-decoration:underline}
 }
 
 .recharts-legend-item-text{ color: rgba(255,255,255,.75) !important; }
+
+
+/* Auth pages */
+.authShell{
+  min-height: 100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding: 24px;
+}
+.authCard{
+  width: 420px;
+  max-width: calc(100vw - 48px);
+  background: rgba(255,255,255,.92);
+  border: 1px solid rgba(0,0,0,.08);
+  border-radius: 18px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.18);
+  padding: 18px;
+}
+.authTitle{ font-size: 20px; font-weight: 800; margin: 2px 0 10px; }
+.authSubtitle{ color: #555; font-size: 13px; margin-bottom: 12px; }
+.authRow{ margin-top: 10px; }
+.authRow label{ display:block; font-size: 12px; color:#333; margin-bottom: 4px; }
+.authRow input, .authRow select{
+  width:100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,.14);
+  background: white;
+  outline: none;
+}
+.authBtn{
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background:#111;
+  color:#fff;
+  font-weight: 800;
+  cursor:pointer;
+}
+.authLink{ margin-top: 12px; font-size: 13px; color:#333; }
+.authErr{
+  margin-top: 10px;
+  background: rgba(220,38,38,.12);
+  border: 1px solid rgba(220,38,38,.35);
+  color: #7f1d1d;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+}

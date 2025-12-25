@@ -1,15 +1,17 @@
+from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from datetime import datetime
-import base64, json, re
+import base64, json, os
 
-from app.db import SessionLocal
-from app.models import Application, JobDescription, StoredFile, BaseResume, User
-from app.auth import require_extension_token
-from app.docx_render import render_resume
-from app.storage import save_bytes
-from app.ai import client
+from openai import OpenAI
+
+from ..db import SessionLocal
+from ..models import Application, BaseResume, JobDescription, StoredFile, User
+from ..auth import get_principal, Principal, assert_user_access
+from ..docx_render import render_resume
+from ..storage import save_bytes, safe_filename
 
 router = APIRouter()
 
@@ -20,97 +22,93 @@ def get_db():
     finally:
         db.close()
 
-class ApplyIn(BaseModel):
-    user_id: str = Field(..., min_length=1)
-    url: str = Field(..., min_length=5)
-    company: str = Field(..., min_length=1)
-    position: str = Field(..., min_length=1)
+class ApplyGenerateIn(BaseModel):
+    user_id: str
+    url: str
+    company: str
+    position: str
     jd_text: str = Field(..., min_length=50)
 
-def safe_filename(s: str) -> str:
-    s = re.sub(r"[^\w\- ]+", "", s).strip()
-    s = re.sub(r"\s+", "_", s)
-    return s[:80] if s else "Document"
+class ApplyGenerateBatchIn(BaseModel):
+    url: str
+    company: str
+    position: str
+    jd_text: str = Field(..., min_length=50)
+    target_user_ids: list[str] | None = None
 
-@router.post("/ingest/apply-and-generate", dependencies=[Depends(require_extension_token)])
-def apply_and_generate(p: ApplyIn, db: Session = Depends(get_db)):
-    # ensure user exists
-    if not db.get(User, p.user_id):
-        db.add(User(id=p.user_id))
+def _ensure_user(db: Session, user_id: str, admin_id: str | None = None):
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        u = User(id=user_id, admin_id=admin_id, name=None)
+        db.add(u)
         db.commit()
+    return u
 
-    base = db.get(BaseResume, p.user_id)
+def _generate_for_user(db: Session, user_id: str, url: str, company: str, position: str, jd_text: str):
+    base = db.query(BaseResume).filter(BaseResume.user_id == user_id).first()
     if not base:
-        raise HTTPException(400, "Base resume not set for user. PUT /v1/users/{user_id}/base-resume first.")
+        raise HTTPException(400, f"Base resume missing for user_id={user_id}")
 
-    # upsert application by (user_id, url)
-    app = (
-        db.query(Application)
-        .filter(Application.user_id == p.user_id, Application.url == p.url)
-        .first()
-    )
+    app = db.query(Application).filter(Application.user_id == user_id, Application.url == url).first()
     if not app:
-        app = Application(user_id=p.user_id, company=p.company, role=p.position, url=p.url, stage="applied")
+        app = Application(user_id=user_id, company=company, role=position, url=url, stage="applied", created_at=datetime.utcnow(), updated_at=datetime.utcnow())
         db.add(app)
         db.commit()
         db.refresh(app)
     else:
-        app.company = p.company
-        app.role = p.position
+        app.company = company
+        app.role = position
+        app.updated_at = datetime.utcnow()
         db.commit()
 
-    # store JD
-    db.add(JobDescription(user_id=p.user_id, application_id=app.id, jd_text=p.jd_text))
+    db.add(JobDescription(user_id=user_id, application_id=app.id, jd_text=jd_text, created_at=datetime.utcnow()))
     db.commit()
 
-    # Ask for strict JSON for your template placeholders
-    prompt = f"""You are a resume tailoring system.
-Return STRICT JSON only (no markdown, no commentary).
-Keys required:
-- SUMMARY: string
-- SKILLS: string (comma-separated)
-- EXP_COMPANY_1: string
-- EXP_COMPANY_2: string
-- EXP_COMPANY_3: string
-- EXP_COMPANY_4: string
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(500, "OPENAI_API_KEY not set")
+    client = OpenAI(api_key=api_key)
+
+    prompt = f"""
+You are an expert resume writer. Based on the JOB DESCRIPTION and the BASE RESUME below, output ONLY valid JSON with these keys:
+- name, title, summary (string), skills (list of strings), experience (list of objects with: company, role, bullets(list)), education (list of strings)
 
 Rules:
-- Use ONLY facts from BASE RESUME. Do NOT invent companies, titles, dates.
-- Tailor wording to the JOB DESCRIPTION with relevant keywords.
-- Each EXP_COMPANY_n should be 3-6 bullets separated by '\n' and starting with '• '.
+- Tailor bullets to match the job description.
+- Keep results professional and concise.
+- Do not include markdown. Return JSON only.
 
 JOB DESCRIPTION:
-{p.jd_text}
+{jd_text}
 
 BASE RESUME:
 {base.content_text}
 """.strip()
 
     resp = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
+        model=os.getenv("CAREEROS_MODEL", "gpt-4o-mini"),
+        messages=[{"role":"user","content":prompt}],
         temperature=0.2,
     )
 
-    raw = resp.choices[0].message.content.strip()
+    raw = (resp.choices[0].message.content or "").strip()
     try:
         data = json.loads(raw)
     except Exception:
         raise HTTPException(500, f"Model did not return valid JSON. Raw: {raw[:400]}")
 
-    # Render DOCX using your template
     docx_bytes = render_resume(data)
 
-    company_fn = safe_filename(p.company)
-    role_fn = safe_filename(p.position)
+    company_fn = safe_filename(company)
+    role_fn = safe_filename(position)
     filename = f"Resume_{company_fn}_{role_fn}.docx"
-    path = save_bytes(p.user_id, app.id, filename, docx_bytes)
+    path = save_bytes(user_id, app.id, filename, docx_bytes)
 
     sf = StoredFile(
-        user_id=p.user_id,
+        user_id=user_id,
         application_id=app.id,
         kind="resume_docx",
-        path=path,
+        path=str(path),
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename=filename,
         created_at=datetime.utcnow(),
@@ -120,8 +118,48 @@ BASE RESUME:
     db.refresh(sf)
 
     return {
+        "user_id": user_id,
         "application_id": app.id,
         "resume_docx_file_id": sf.id,
-        "resume_docx_base64": base64.b64encode(docx_bytes).decode("ascii"),
         "resume_download_url": f"/v1/files/{sf.id}",
+        "resume_docx_base64": base64.b64encode(docx_bytes).decode("ascii"),
+        "filename": filename,
     }
+
+@router.post("/ingest/apply-and-generate")
+def apply_and_generate(
+    p: ApplyGenerateIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    assert_user_access(principal, p.user_id, db)
+    _ensure_user(db, p.user_id, principal.get("admin_id"))
+    out = _generate_for_user(db, p.user_id, p.url, p.company, p.position, p.jd_text)
+    return {k: v for k, v in out.items() if k != "user_id"}  # keep response compatible
+
+@router.post("/ingest/apply-and-generate/batch")
+def apply_and_generate_batch(
+    p: ApplyGenerateBatchIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    if principal["type"] != "admin":
+        raise HTTPException(403, "Batch endpoint is admin-only")
+
+    users = db.query(User).filter(User.admin_id == principal["admin_id"]).order_by(User.id.asc()).all()
+    allowed = set(u.id for u in users)
+    targets = [uid for uid in (p.target_user_ids or list(allowed)) if uid in allowed]
+
+    results = []
+    for uid in targets:
+        try:
+            _ensure_user(db, uid, principal["admin_id"])
+            r = _generate_for_user(db, uid, p.url, p.company, p.position, p.jd_text)
+            r["ok"] = True
+            results.append(r)
+        except HTTPException as e:
+            results.append({"user_id": uid, "ok": False, "error": e.detail})
+        except Exception as e:
+            results.append({"user_id": uid, "ok": False, "error": str(e)})
+
+    return {"ok": True, "results": results}

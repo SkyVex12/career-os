@@ -3,9 +3,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from datetime import datetime
 
-from app.db import SessionLocal
-from app.models import User, BaseResume
-from app.auth import require_extension_token
+from ..db import SessionLocal
+from ..models import User, BaseResume
+from ..auth import get_principal, Principal, assert_user_access
 
 router = APIRouter()
 
@@ -17,13 +17,21 @@ def get_db():
         db.close()
 
 class BaseResumeIn(BaseModel):
-    content_text: str = Field(..., min_length=50)
+    content_text: str = Field(..., min_length=20)
 
-@router.put("/users/{user_id}/base-resume", dependencies=[Depends(require_extension_token)])
-def upsert_base_resume(user_id: str, payload: BaseResumeIn, db: Session = Depends(get_db)):
-    # ensure user exists
-    if not db.get(User, user_id):
-        db.add(User(id=user_id))
+@router.put("/users/{user_id}/base-resume")
+def put_base_resume(
+    user_id: str,
+    payload: BaseResumeIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    assert_user_access(principal, user_id, db)
+
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        u = User(id=user_id, admin_id=principal.get("admin_id"))
+        db.add(u)
         db.commit()
 
     br = db.get(BaseResume, user_id)
@@ -37,8 +45,13 @@ def upsert_base_resume(user_id: str, payload: BaseResumeIn, db: Session = Depend
     db.commit()
     return {"ok": True, "user_id": user_id, "updated_at": now.isoformat()}
 
-@router.get("/users/{user_id}/base-resume", dependencies=[Depends(require_extension_token)])
-def get_base_resume(user_id: str, db: Session = Depends(get_db)):
+@router.get("/users/{user_id}/base-resume")
+def get_base_resume(
+    user_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    assert_user_access(principal, user_id, db)
     br = db.get(BaseResume, user_id)
     if not br:
         raise HTTPException(404, "Base resume not found")

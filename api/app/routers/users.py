@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends
-from app.db import SessionLocal
 from sqlalchemy.orm import Session
-from ..models import User
 
-router = APIRouter(prefix="/v1", tags=["users"])
+from ..db import SessionLocal
+from ..models import User
+from ..auth import get_principal, Principal
+
+router = APIRouter()
 
 def get_db():
     db = SessionLocal()
@@ -12,8 +14,19 @@ def get_db():
     finally:
         db.close()
 
+@router.get("/me")
+def me(principal: Principal = Depends(get_principal)):
+    return principal
+
 @router.get("/users")
-def list_users(db: Session = Depends(get_db)):
-    # Return all users. UI expects items:[{id,name?}]
-    users = db.query(User).order_by(User.id.asc()).all()
-    return {"items": [{"id": u.id, "name": None} for u in users]}
+def list_users(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    if principal["type"] == "user":
+        u = db.query(User).filter(User.id == principal["user_id"]).first()
+        return {"items": [{"id": u.id, "name": u.name}]} if u else {"items":[]}
+
+    # admin
+    users = db.query(User).filter(User.admin_id == principal["admin_id"]).order_by(User.id.asc()).all()
+    return {"items": [{"id": u.id, "name": u.name} for u in users]}
