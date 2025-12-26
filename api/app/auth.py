@@ -1,11 +1,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 import secrets
 from dataclasses import dataclass
 from typing import Generator, Literal, Optional
 
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from .db import SessionLocal
@@ -19,6 +20,7 @@ PrincipalType = Literal["user", "admin"]
 class Principal:
     type: PrincipalType
     id: str  # user_id or admin_id
+    name: Optional[str] = None
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -36,7 +38,7 @@ def _token_from_header(x_auth_token: Optional[str]) -> str:
 
 
 def get_principal(
-    db: Session,
+    db: Session = Depends(get_db),
     x_auth_token: Optional[str] = Header(default=None, alias="X-Auth-Token"),
 ) -> Principal:
     token = _token_from_header(x_auth_token)
@@ -48,7 +50,7 @@ def get_principal(
     if row.principal_type not in ("user", "admin"):
         raise HTTPException(status_code=401, detail="Invalid token principal_type")
 
-    return Principal(type=row.principal_type, id=row.principal_id)
+    return Principal(type=row.principal_type, id=row.principal_id, name=getattr(row, 'principal_name', None))
 
 
 def require_admin(principal: Principal) -> Principal:
@@ -63,7 +65,7 @@ def require_user(principal: Principal) -> Principal:
     return principal
 
 
-def mint_token(db: Session, principal_type: PrincipalType, principal_id: str) -> str:
+def mint_token(db: Session, principal_type: PrincipalType, principal_id: str, principal_name: str | None = None) -> str:
     token = secrets.token_urlsafe(32)
-    db.add(AuthToken(token=token, principal_type=principal_type, principal_id=principal_id))
+    db.add(AuthToken(token=token, principal_type=principal_type, principal_id=principal_id, principal_name=principal_name, created_at=datetime.utcnow()))
     return token

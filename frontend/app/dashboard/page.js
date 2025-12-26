@@ -20,14 +20,32 @@ function kpiSub(label, value) {
 }
 
 export default function DashboardPage() {
-  const userId = useMemo(() => {
-    if (typeof window === "undefined") return "u1";
-    return localStorage.getItem("careeros_user_id") || "u1";
-  }, []);
+  // NOTE: don't read localStorage during the initial render ...
+  // can cause hydration mismatches. Read it after mount instead.
+  const [userId, setUserId] = useState("u1");
 
   const [days, setDays] = useState(60);
   const [data, setData] = useState(null);
   const [status, setStatus] = useState("");
+
+  useEffect(() => {
+    const sync = () => {
+      try {
+        const v = localStorage.getItem("careeros_user_id") || "u1";
+        setUserId(v);
+      } catch {}
+    };
+    sync();
+    const onStorage = (e) => {
+      if (e.key === "careeros_user_id") sync();
+    };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("careeros:user-changed", sync);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("careeros:user-changed", sync);
+    };
+  }, []);
 
   async function load() {
     try {
@@ -41,7 +59,7 @@ export default function DashboardPage() {
     }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [days]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [days, userId]);
 
   const stagePie = useMemo(() => {
     if (!data?.stage_counts) return [];
@@ -58,8 +76,9 @@ export default function DashboardPage() {
           <span className="chip">user: {userId}</span>
           <span className="chip">window: last {days} days</span>
           <select className="select" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+            <option value={1}>1 day</option>
+            <option value={7}>7 days</option>
             <option value={30}>30 days</option>
-            <option value={60}>60 days</option>
             <option value={90}>90 days</option>
             <option value={180}>180 days</option>
             <option value={365}>365 days</option>

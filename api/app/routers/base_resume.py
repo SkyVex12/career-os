@@ -5,7 +5,7 @@ from datetime import datetime
 
 from ..db import SessionLocal
 from ..models import User, BaseResume
-from ..auth import get_principal, Principal, assert_user_access
+from ..auth import get_principal, Principal
 
 router = APIRouter()
 
@@ -26,7 +26,6 @@ def put_base_resume(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ):
-    assert_user_access(principal, user_id, db)
 
     u = db.query(User).filter(User.id == user_id).first()
     if not u:
@@ -51,7 +50,6 @@ def get_base_resume(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ):
-    assert_user_access(principal, user_id, db)
     br = db.get(BaseResume, user_id)
     if not br:
         raise HTTPException(404, "Base resume not found")

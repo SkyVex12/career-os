@@ -18,13 +18,14 @@ class MeOut(BaseModel):
     type: str
     admin_id: str | None = None
     user_id: str | None = None
+    name: str | None = None
 
 
 @router.get("/me", response_model=MeOut)
 def me(principal: Principal = Depends(get_principal)) -> MeOut:
     if principal.type == "admin":
-        return MeOut(type="admin", admin_id=principal.id)
-    return MeOut(type="user", user_id=principal.id)
+        return MeOut(type="admin", admin_id=principal.id, name=principal.name)
+    return MeOut(type="user", user_id=principal.id, name=principal.name)
 
 
 @router.get("/admins/public")
@@ -55,24 +56,31 @@ def signup(payload: SignupIn, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="Email already registered")
 
     now = dt.datetime.utcnow()
-
+    full_name = f"{payload.firstname or ''} {payload.lastname or ''}".strip() or None
     if payload.role == "admin":
         admin_id = f"a{now.strftime('%Y%m%d%H%M%S')}{now.microsecond}"
-        admin = Admin(id=admin_id, name=f"{payload.firstname or ''} {payload.lastname or ''}".strip() or "Admin", created_at=now, updated_at=now)
+        admin = Admin(
+            id=admin_id, 
+            name=full_name or "Admin", 
+            first_name=payload.firstname, 
+            last_name=payload.lastname,
+            created_at=now, 
+            updated_at=now
+        )
         db.add(admin)
 
         db.add(AuthCredential(email=email, password_hash=hash_password(payload.password), principal_type="admin", principal_id=admin_id, created_at=now))
-        token = mint_token(db, "admin", admin_id)
+        token = mint_token(db, "admin", admin_id, full_name)
         db.commit()
-        return {"token": token, "principal": {"type": "admin", "admin_id": admin_id}}
+        return {"token": token, "principal": {"type": "admin", "admin_id": admin_id, "name": full_name}}
 
     # role user
     user_id = f"u{now.strftime('%Y%m%d%H%M%S')}{now.microsecond}"
     user = User(
         id=user_id,
-        name=f"{payload.firstname or ''} {payload.lastname or ''}".strip() or None,
-        firstname=payload.firstname,
-        lastname=payload.lastname,
+        name=full_name or None,
+        first_name=payload.firstname,
+        last_name=payload.lastname,
         dob=payload.dob,
         created_at=now,
         updated_at=now,
@@ -94,9 +102,9 @@ def signup(payload: SignupIn, db: Session = Depends(get_db)):
         for aid in existing_admin_ids:
             db.add(AdminUser(admin_id=aid, user_id=user_id, created_at=now))
 
-    token = mint_token(db, "user", user_id)
+    token = mint_token(db, "user", user_id, full_name)
     db.commit()
-    return {"token": token, "principal": {"type": "user", "user_id": user_id}}
+    return {"token": token, "principal": {"type": "user", "user_id": user_id, "name": full_name}}
 
 
 class LoginIn(BaseModel):
@@ -109,14 +117,14 @@ def login(payload: LoginIn, db: Session = Depends(get_db)):
     email = payload.email.lower().strip()
     cred = db.query(AuthCredential).filter(AuthCredential.email == email).first()
     if not cred or not verify_password(payload.password, cred.password_hash):
+        print(verify_password(payload.password, cred.password_hash) if cred else "no cred")
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    token = mint_token(db, cred.principal_type, cred.principal_id)
+    token = mint_token(db, cred.principal_type, cred.principal_id, cred.principal_name)
     db.commit()
     if cred.principal_type == "admin":
-        return {"token": token, "principal": {"type": "admin", "admin_id": cred.principal_id}}
-    return {"token": token, "principal": {"type": "user", "user_id": cred.principal_id}}
-
+        return {"token": token, "principal": {"type": "admin", "admin_id": cred.principal_id, "name": cred.principal_name}}
+    return {"token": token, "principal": {"type": "user", "user_id": cred.principal_id, "name": cred.principal_name}}
 
 @router.post("/auth/logout")
 def logout(

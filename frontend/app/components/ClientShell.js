@@ -64,6 +64,11 @@ export default function ClientShell({ children }) {
   useEffect(() => {
     if (!mounted) return;
     localStorage.setItem("careeros_scope", JSON.stringify(scope));
+    try {
+      window.dispatchEvent(new CustomEvent("careeros:scope", { detail: scope }));
+      // Back-compat: some pages listen for this.
+      window.dispatchEvent(new Event("careeros:user-changed"));
+    } catch (e) {}
   }, [mounted, scope]);
 
   const value = useMemo(

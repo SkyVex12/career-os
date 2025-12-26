@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
 import TopbarClient from "../components/TopbarClient";
 import StageBadge from "../components/StageBadge";
@@ -40,9 +40,23 @@ export default function ApplicationsPage() {
   }));
   const [dragOverStage, setDragOverStage] = useState("");
 
-  const userId = useMemo(() => {
-    if (typeof window === "undefined") return "u1";
-    return localStorage.getItem("careeros_user_id") || "u1";
+  // Avoid reading localStorage during the initial render (prevents ...)
+  const [userId, setUserId] = useState("u1");
+  useEffect(() => {
+    const read = () => {
+      try { setUserId(localStorage.getItem("careeros_user_id") || "u1"); } catch {}
+    };
+    read();
+    // Same-tab updates (we dispatch this event when scope changes)
+    const onScope = () => read();
+    window.addEventListener("careeros:scope", onScope);
+    // Cross-tab updates
+    const onStorage = (e) => { if (e.key === "careeros_user_id" || e.key === "careeros_scope") read(); };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("careeros:scope", onScope);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   function buildCommonParams(extra = {}) {
@@ -110,7 +124,7 @@ export default function ApplicationsPage() {
     if (view === "list") loadList();
     else loadKanbanAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view]);
+  }, [view, userId]);
 
   // when filters change: reset paging and reload current view
   useEffect(() => {
@@ -129,19 +143,19 @@ export default function ApplicationsPage() {
     }, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, filterStage, dateFrom, dateTo]);
+  }, [q, filterStage, dateFrom, dateTo, userId]);
 
   useEffect(() => {
     if (view === "list") loadList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listPage, listPageSize]);
+  }, [listPage, listPageSize, userId]);
 
   // kanban paging reload per stage
   useEffect(() => {
     if (view !== "kanban") return;
     for (const s of STAGES) loadKanbanStage(s);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kb.applied.page, kb.interview.page, kb.offer.page, kb.rejected.page,
+  }, [userId, kb.applied.page, kb.interview.page, kb.offer.page, kb.rejected.page,
       kb.applied.page_size, kb.interview.page_size, kb.offer.page_size, kb.rejected.page_size]);
 
   const listPageCount = Math.max(1, Math.ceil(listTotal / listPageSize));

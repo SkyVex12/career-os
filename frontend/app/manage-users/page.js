@@ -64,7 +64,7 @@ export default function ManageUsersPage() {
     return (
       <main className="container">
         <Topbar title="Manage Users" subtitle="Admin only" />
-        <div className="card">Forbidden (admin only).</div>
+        <div className="card" style={{ gap:12, marginTop: 12 }}>Forbidden (admin only).</div>
       </main>
     );
   }
@@ -73,7 +73,7 @@ export default function ManageUsersPage() {
     <main className="container">
       <Topbar title="Manage Users" subtitle="Create & link users" />
 
-      <div className="grid2">
+      <div className="grid2" style={{ gap: 12, marginTop: 12 }}>
         <div className="card">
           <div className="cardTitle">Create new user</div>
           <form onSubmit={onCreate}>

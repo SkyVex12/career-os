@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -14,49 +13,84 @@ export default function LoginPage() {
 
   async function onSubmit(e) {
     e.preventDefault();
-    setStatus("Logging in...");
+    setStatus("");
     try {
       const res = await api("/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      setToken(res.token);
-      setStatus("✅ Logged in");
+      setToken(res.token || "");
       router.push("/dashboard");
-    } catch (err) {
-      setStatus(String(err?.message || err));
+    } catch (e) {
+      setStatus(String(e?.message || e));
     }
   }
 
   return (
-    <main className="authShell">
-      <div className="authBg" aria-hidden="true" />
+    <div className="authShell">
       <div className="authCard">
-        <div className="authBrand">
-          <div className="authMark" />
-          <div>
-            <div className="authTitle">CareerOS</div>
-            <div className="authSub">Sign in to manage applications & generate docs</div>
+        <div className="authHeader">
+          <div className="authLogo">
+            <div className="authLogoMark" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M5 12c2.4-4.2 5.2-6 7-6s4.6 1.8 7 6c-2.4 4.2-5.2 6-7 6s-4.6-1.8-7-6Z" stroke="rgba(10,15,28,.95)" strokeWidth="2"/>
+                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" fill="rgba(10,15,28,.95)"/>
+              </svg>
+            </div>
+            <div>
+              <div className="authTitle">Welcome back</div>
+              <div className="authDesc">Log in to manage your applications and generate docs.</div>
+            </div>
+          </div>
+
+          <div className="pill" style={{ fontWeight: 900 }}>
+            Demo-ready
           </div>
         </div>
 
-        <form onSubmit={onSubmit} className="authForm">
-          <label className="authLabel">Email</label>
-          <input className="authInput" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" />
+        {status ? <div className="authErr">{status}</div> : null}
 
-          <label className="authLabel">Password</label>
-          <input className="authInput" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
+        <form onSubmit={onSubmit} style={{ marginTop: 12 }}>
+          <div className="authField">
+            <div className="authLabel">Email</div>
+            <input
+              className="authInput"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@domain.com"
+              autoComplete="email"
+              required
+            />
+          </div>
 
-          <button className="authBtn authBtnPrimary" type="submit">Login</button>
+          <div className="authField">
+            <div className="authLabel">Password</div>
+            <input
+              className="authInput"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              autoComplete="current-password"
+              required
+            />
+          </div>
 
-          {status ? <div className={status.startsWith("✅") ? "authOk" : "authErr"}>{status}</div> : null}
+          <button className="authBtn" type="submit">
+            Log in
+          </button>
 
-          <div className="authFoot">
+          <div className="authAlt">
             <span>New here?</span>
             <Link href="/signup">Create an account</Link>
           </div>
+
+          <div className="authHint">
+            Tip: Admin accounts can manage multiple users. Use the scope selector in the top bar after login.
+          </div>
         </form>
       </div>
-    </main>
+    </div>
   );
 }

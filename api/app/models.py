@@ -10,15 +10,18 @@ class Admin(Base):
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     dob = Column(String, nullable=True)  # ISO date string (YYYY-MM-DD)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 class User(Base):
     __tablename__ = "users"
     id = Column(String, primary_key=True)  # extension-provided user_id (V1)
-    admin_id = Column(String, ForeignKey("admins.id"), nullable=True, index=True)
     name = Column(String, nullable=True)
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     dob = Column(String, nullable=True)  # ISO date string (YYYY-MM-DD)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class AdminUser(Base):
@@ -39,6 +42,7 @@ class AuthCredential(Base):
     password_hash = Column(String, nullable=False)
     principal_type = Column(String, nullable=False)  # 'admin' | 'user'
     principal_id = Column(String, nullable=False)    # admin_id or user_id
+    principal_name = Column(String, nullable=False)  # principal name
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 class AuthToken(Base):
@@ -47,6 +51,7 @@ class AuthToken(Base):
     token = Column(String, unique=True, index=True, nullable=False)
     principal_type = Column(String, nullable=False)  # 'admin' | 'user'
     principal_id = Column(String, nullable=False)    # admin_id or user_id
+    principal_name = Column(String, nullable=False)  # principal name
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 class BaseResume(Base):

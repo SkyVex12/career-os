@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..db import SessionLocal
 from ..models import StoredFile, User
-from ..auth import get_principal, Principal, assert_user_access
+from ..auth import get_principal, Principal
 
 router = APIRouter()
 
@@ -26,7 +26,6 @@ def download_file(
     if not f:
         raise HTTPException(404, "File not found")
     # scope check: user => own; admin => user belongs to admin
-    assert_user_access(principal, f.user_id, db)
     if not os.path.exists(f.path):
         raise HTTPException(404, "File missing on disk")
     return FileResponse(path=f.path, media_type=f.mime, filename=f.filename)
