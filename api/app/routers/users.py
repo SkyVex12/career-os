@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import datetime as dt
@@ -69,7 +68,11 @@ def admin_create_user_and_link(
     require_admin(principal)
 
     # email unique constraint in AuthCredential
-    existing = db.query(AuthCredential).filter(AuthCredential.email == payload.email.lower()).first()
+    existing = (
+        db.query(AuthCredential)
+        .filter(AuthCredential.email == payload.email.lower())
+        .first()
+    )
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
 
@@ -108,6 +111,7 @@ def admin_create_user_and_link(
 
 from ..models import BaseResume
 
+
 class BaseResumeIn(BaseModel):
     content_text: str
 
@@ -124,7 +128,12 @@ def put_base_resume(
         if principal.id != user_id:
             raise HTTPException(status_code=403, detail="Forbidden")
     else:
-        if db.query(AdminUser).filter(AdminUser.admin_id == principal.id, AdminUser.user_id == user_id).first() is None:
+        if (
+            db.query(AdminUser)
+            .filter(AdminUser.admin_id == principal.id, AdminUser.user_id == user_id)
+            .first()
+            is None
+        ):
             raise HTTPException(status_code=403, detail="Forbidden")
 
     now = dt.datetime.utcnow()
@@ -144,8 +153,18 @@ def get_base_resume(
         if principal.id != user_id:
             raise HTTPException(status_code=403, detail="Forbidden")
     else:
-        if db.query(AdminUser).filter(AdminUser.admin_id == principal.id, AdminUser.user_id == user_id).first() is None:
+        if (
+            db.query(AdminUser)
+            .filter(AdminUser.admin_id == principal.id, AdminUser.user_id == user_id)
+            .first()
+            is None
+        ):
             raise HTTPException(status_code=403, detail="Forbidden")
 
-    br = db.query(BaseResume).filter(BaseResume.user_id == user_id).order_by(BaseResume.created_at.desc()).first()
+    br = (
+        db.query(BaseResume)
+        .filter(BaseResume.user_id == user_id)
+        .order_by(BaseResume.created_at.desc())
+        .first()
+    )
     return {"content_text": br.content_text if br else ""}

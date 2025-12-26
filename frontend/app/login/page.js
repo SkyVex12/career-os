@@ -33,13 +33,22 @@ export default function LoginPage() {
           <div className="authLogo">
             <div className="authLogoMark" aria-hidden="true">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path d="M5 12c2.4-4.2 5.2-6 7-6s4.6 1.8 7 6c-2.4 4.2-5.2 6-7 6s-4.6-1.8-7-6Z" stroke="rgba(10,15,28,.95)" strokeWidth="2"/>
-                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" fill="rgba(10,15,28,.95)"/>
+                <path
+                  d="M5 12c2.4-4.2 5.2-6 7-6s4.6 1.8 7 6c-2.4 4.2-5.2 6-7 6s-4.6-1.8-7-6Z"
+                  stroke="rgba(10,15,28,.95)"
+                  strokeWidth="2"
+                />
+                <path
+                  d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+                  fill="rgba(10,15,28,.95)"
+                />
               </svg>
             </div>
             <div>
               <div className="authTitle">Welcome back</div>
-              <div className="authDesc">Log in to manage your applications and generate docs.</div>
+              <div className="authDesc">
+                Log in to manage your applications and generate docs.
+              </div>
             </div>
           </div>
 
@@ -87,7 +96,8 @@ export default function LoginPage() {
           </div>
 
           <div className="authHint">
-            Tip: Admin accounts can manage multiple users. Use the scope selector in the top bar after login.
+            Tip: Admin accounts can manage multiple users. Use the scope
+            selector in the top bar after login.
           </div>
         </form>
       </div>

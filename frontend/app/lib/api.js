@@ -1,5 +1,5 @@
-
-const DEFAULT_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
+const DEFAULT_BASE =
+  process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
 
 export function getToken() {
   if (typeof window === "undefined") return "";
@@ -17,7 +17,8 @@ export async function api(path, options = {}) {
   const url = path.startsWith("http") ? path : base + path;
 
   const headers = new Headers(options.headers || {});
-  if (!headers.has("Content-Type") && options.body) headers.set("Content-Type", "application/json");
+  if (!headers.has("Content-Type") && options.body)
+    headers.set("Content-Type", "application/json");
 
   const tok = getToken();
   if (tok) headers.set("X-Auth-Token", tok);
@@ -31,7 +32,10 @@ export async function api(path, options = {}) {
     data = await res.text().catch(() => "");
   }
   if (!res.ok) {
-    const msg = typeof data === "string" ? data : (data?.detail || data?.message || JSON.stringify(data));
+    const msg =
+      typeof data === "string"
+        ? data
+        : data?.detail || data?.message || JSON.stringify(data);
     throw new Error(msg || `HTTP ${res.status}`);
   }
   return data;

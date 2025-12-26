@@ -1,7 +1,7 @@
-
 from io import BytesIO
 from reportlab.lib.pagesizes import LETTER
 from reportlab.pdfgen import canvas
+
 
 def text_to_pdf_bytes(title: str, body: str) -> bytes:
     buf = BytesIO()

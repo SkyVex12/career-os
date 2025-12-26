@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -50,7 +49,11 @@ def get_principal(
     if row.principal_type not in ("user", "admin"):
         raise HTTPException(status_code=401, detail="Invalid token principal_type")
 
-    return Principal(type=row.principal_type, id=row.principal_id, name=getattr(row, 'principal_name', None))
+    return Principal(
+        type=row.principal_type,
+        id=row.principal_id,
+        name=getattr(row, "principal_name", None),
+    )
 
 
 def require_admin(principal: Principal) -> Principal:
@@ -65,7 +68,20 @@ def require_user(principal: Principal) -> Principal:
     return principal
 
 
-def mint_token(db: Session, principal_type: PrincipalType, principal_id: str, principal_name: str | None = None) -> str:
+def mint_token(
+    db: Session,
+    principal_type: PrincipalType,
+    principal_id: str,
+    principal_name: str | None = None,
+) -> str:
     token = secrets.token_urlsafe(32)
-    db.add(AuthToken(token=token, principal_type=principal_type, principal_id=principal_id, principal_name=principal_name, created_at=datetime.utcnow()))
+    db.add(
+        AuthToken(
+            token=token,
+            principal_type=principal_type,
+            principal_id=principal_id,
+            principal_name=principal_name,
+            created_at=datetime.utcnow(),
+        )
+    )
     return token

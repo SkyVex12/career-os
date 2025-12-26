@@ -5,7 +5,12 @@ import { usePathname } from "next/navigation";
 
 const Icon = ({ name }) => {
   // Minimal inline icons to avoid extra deps
-  const common = { className: "navIcon", viewBox: "0 0 24 24", fill: "none", xmlns: "http://www.w3.org/2000/svg" };
+  const common = {
+    className: "navIcon",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    xmlns: "http://www.w3.org/2000/svg",
+  };
   switch (name) {
     case "dashboard":
       return (
@@ -30,16 +35,37 @@ const Icon = ({ name }) => {
     case "users":
       return (
         <svg {...common}>
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2"/>
-          <path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="2"/>
-          <path d="M22 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" strokeWidth="2"/>
-          <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" strokeWidth="2"/>
+          <path
+            d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"
+            stroke="currentColor"
+            strokeWidth="2"
+          />
+          <path
+            d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"
+            stroke="currentColor"
+            strokeWidth="2"
+          />
+          <path
+            d="M22 21v-2a4 4 0 0 0-3-3.87"
+            stroke="currentColor"
+            strokeWidth="2"
+          />
+          <path
+            d="M16 3.13a4 4 0 0 1 0 7.75"
+            stroke="currentColor"
+            strokeWidth="2"
+          />
         </svg>
       );
     default:
       return (
         <svg {...common}>
-          <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          <path
+            d="M4 6h16M4 12h16M4 18h16"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
         </svg>
       );
   }
@@ -59,8 +85,15 @@ export default function Sidebar() {
       <Link href="/dashboard" className="brand" aria-label="CareerOS Home">
         <div className="brandMark" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none">
-            <path d="M5 12c2.4-4.2 5.2-6 7-6s4.6 1.8 7 6c-2.4 4.2-5.2 6-7 6s-4.6-1.8-7-6Z" stroke="rgba(10,15,28,.95)" strokeWidth="2"/>
-            <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" fill="rgba(10,15,28,.95)"/>
+            <path
+              d="M5 12c2.4-4.2 5.2-6 7-6s4.6 1.8 7 6c-2.4 4.2-5.2 6-7 6s-4.6-1.8-7-6Z"
+              stroke="rgba(10,15,28,.95)"
+              strokeWidth="2"
+            />
+            <path
+              d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+              fill="rgba(10,15,28,.95)"
+            />
           </svg>
         </div>
         <div>
@@ -85,7 +118,8 @@ export default function Sidebar() {
       <div style={{ marginTop: 14 }} className="card">
         <div className="cardTitle">Tip</div>
         <div className="cardSub">
-          Use the extension on a job post to auto-save the application and generate a tailored resume.
+          Use the extension on a job post to auto-save the application and
+          generate a tailored resume.
         </div>
       </div>
     </aside>

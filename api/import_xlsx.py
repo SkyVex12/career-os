@@ -42,6 +42,7 @@ def parse_date_cell(v: Any) -> Optional[datetime]:
     # openpyxl may give date as datetime already; but handle date-like too
     try:
         from datetime import date as dt_date  # noqa
+
         if isinstance(v, dt_date) and not isinstance(v, datetime):
             return datetime.combine(v, time(0, 0, 0), tzinfo=timezone.utc)
     except Exception:
@@ -100,7 +101,9 @@ def main():
     required = ["date", "company", "title", "link", "status"]
     missing = [k for k in required if k not in hdr]
     if missing:
-        raise ValueError(f"Missing columns in header row: {missing}. Found: {list(hdr.keys())}")
+        raise ValueError(
+            f"Missing columns in header row: {missing}. Found: {list(hdr.keys())}"
+        )
 
     db = SessionLocal()
     try:
@@ -166,14 +169,16 @@ def main():
                         skipped += 1
                     continue
 
-                db.add(Application(
-                    user_id=USER_ID,
-                    company=company,
-                    role=title,
-                    url=url,
-                    stage=stage,
-                    created_at=dt,
-                ))
+                db.add(
+                    Application(
+                        user_id=USER_ID,
+                        company=company,
+                        role=title,
+                        url=url,
+                        stage=stage,
+                        created_at=dt,
+                    )
+                )
                 inserted += 1
 
             except Exception as e:
@@ -181,7 +186,9 @@ def main():
                 print(f"[WARN] row skipped due to error: {e}")
 
         db.commit()
-        print(f"Done. inserted={inserted}, updated={updated}, skipped={skipped}, bad={bad}")
+        print(
+            f"Done. inserted={inserted}, updated={updated}, skipped={skipped}, bad={bad}"
+        )
 
     finally:
         db.close()

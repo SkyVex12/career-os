@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import datetime as dt
@@ -16,7 +15,12 @@ router = APIRouter(prefix="/v1", tags=["applications"])
 
 
 def _admin_can_access_user(db: Session, admin_id: str, user_id: str) -> bool:
-    return db.query(AdminUser).filter(AdminUser.admin_id == admin_id, AdminUser.user_id == user_id).first() is not None
+    return (
+        db.query(AdminUser)
+        .filter(AdminUser.admin_id == admin_id, AdminUser.user_id == user_id)
+        .first()
+        is not None
+    )
 
 
 def _ensure_access(db: Session, principal: Principal, user_id: str) -> None:
@@ -37,20 +41,28 @@ def exists_application(
     principal: Principal = Depends(get_principal),
 ):
     _ensure_access(db, principal, user_id)
-    row = db.query(Application).filter(Application.user_id == user_id, Application.url == url).order_by(Application.created_at.desc()).first()
+    row = (
+        db.query(Application)
+        .filter(Application.user_id == user_id, Application.url == url)
+        .order_by(Application.created_at.desc())
+        .first()
+    )
     if not row:
         return {"exists": False}
-    return {"exists": True, "application": {
-        "id": row.id,
-        "user_id": row.user_id,
-        "company": row.company,
-        "role": row.role,
-        "stage": row.stage,
-        "url": row.url,
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-        "created_by_type": row.created_by_type,
-        "created_by_id": row.created_by_id,
-    }}
+    return {
+        "exists": True,
+        "application": {
+            "id": row.id,
+            "user_id": row.user_id,
+            "company": row.company,
+            "role": row.role,
+            "stage": row.stage,
+            "url": row.url,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "created_by_type": row.created_by_type,
+            "created_by_id": row.created_by_id,
+        },
+    }
 
 
 @router.get("/applications/exists-any")
@@ -72,17 +84,20 @@ def exists_any_application(
     row = q.first()
     if not row:
         return {"exists": False}
-    return {"exists": True, "application": {
-        "id": row.id,
-        "user_id": row.user_id,
-        "company": row.company,
-        "role": row.role,
-        "stage": row.stage,
-        "url": row.url,
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-        "created_by_type": row.created_by_type,
-        "created_by_id": row.created_by_id,
-    }}
+    return {
+        "exists": True,
+        "application": {
+            "id": row.id,
+            "user_id": row.user_id,
+            "company": row.company,
+            "role": row.role,
+            "stage": row.stage,
+            "url": row.url,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "created_by_type": row.created_by_type,
+            "created_by_id": row.created_by_id,
+        },
+    }
 
 
 @router.get("/applications")
@@ -100,18 +115,22 @@ def list_applications(
         query = query.filter(Application.user_id == principal.id)
     else:
         # admin sees all users they have, optionally scoped to one user
-        query = query.join(AdminUser, AdminUser.user_id == Application.user_id).filter(AdminUser.admin_id == principal.id)
+        query = query.join(AdminUser, AdminUser.user_id == Application.user_id).filter(
+            AdminUser.admin_id == principal.id
+        )
         if user_id and user_id != "__all__":
             query = query.filter(Application.user_id == user_id)
 
     if q:
         like = f"%{q.lower()}%"
-        query = query.filter(or_(
-            Application.company.ilike(like),
-            Application.role.ilike(like),
-            Application.stage.ilike(like),
-            Application.url.ilike(like),
-        ))
+        query = query.filter(
+            or_(
+                Application.company.ilike(like),
+                Application.role.ilike(like),
+                Application.stage.ilike(like),
+                Application.url.ilike(like),
+            )
+        )
 
     total = query.count()
     items = (
@@ -134,4 +153,9 @@ def list_applications(
             "created_by_id": a.created_by_id,
         }
 
-    return {"items": [to_dict(a) for a in items], "page": page, "page_size": page_size, "total": total}
+    return {
+        "items": [to_dict(a) for a in items],
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+    }

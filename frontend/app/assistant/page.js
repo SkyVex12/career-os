@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../lib/api";
@@ -34,7 +34,7 @@ export default function AssistantPage() {
     await fetch(`${API}/assistant/threads/${tid}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: "user", content: input })
+      body: JSON.stringify({ role: "user", content: input }),
     });
     setInput("");
     await refresh(tid);
@@ -43,17 +43,31 @@ export default function AssistantPage() {
   return (
     <div style={{ maxWidth: 900 }}>
       <h1>Assistant (skeleton)</h1>
-      <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 12, minHeight: 220 }}>
-        {messages.map(m => (
+      <div
+        style={{
+          border: "1px solid #eee",
+          borderRadius: 8,
+          padding: 12,
+          minHeight: 220,
+        }}
+      >
+        {messages.map((m) => (
           <div key={m.id} style={{ marginBottom: 10 }}>
             <strong>{m.role}:</strong> {m.content}
           </div>
         ))}
-        {messages.length === 0 && <div style={{ color: "#666" }}>No messages yet.</div>}
+        {messages.length === 0 && (
+          <div style={{ color: "#666" }}>No messages yet.</div>
+        )}
       </div>
 
       <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
-        <textarea rows={3} value={input} onChange={e=>setInput(e.target.value)} placeholder="Ask CareerOS..." />
+        <textarea
+          rows={3}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Ask CareerOS..."
+        />
         <button onClick={send}>Send</button>
         <small style={{ color: "#666" }}>
           This is a placeholder; next step is OpenAI + retrieval + tool-calling.

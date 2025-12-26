@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import datetime as dt
@@ -30,7 +29,15 @@ def ensure_sqlite_schema() -> None:
         # Add a dev token that the extension can use by default
         tok = db.query(AuthToken).filter(AuthToken.token == "dev-admin").first()
         if not tok:
-            db.add(AuthToken(token="dev-admin", principal_type="admin", principal_id="a1", principal_name="dev", created_at=now))
+            db.add(
+                AuthToken(
+                    token="dev-admin",
+                    principal_type="admin",
+                    principal_id="a1",
+                    principal_name="dev",
+                    created_at=now,
+                )
+            )
 
         db.commit()
     finally:

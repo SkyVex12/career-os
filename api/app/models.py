@@ -1,7 +1,16 @@
 from __future__ import annotations
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    DateTime,
+    Text,
+    ForeignKey,
+    UniqueConstraint,
+)
 from .db import Base
+
 
 class Admin(Base):
     __tablename__ = "admins"
@@ -12,6 +21,7 @@ class Admin(Base):
     dob = Column(String, nullable=True)  # ISO date string (YYYY-MM-DD)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
 
 class User(Base):
     __tablename__ = "users"
@@ -26,6 +36,7 @@ class User(Base):
 
 class AdminUser(Base):
     """Many-to-many link: a User can belong to many Admins and an Admin can manage many Users."""
+
     __tablename__ = "admin_users"
     id = Column(Integer, primary_key=True)
     admin_id = Column(String, ForeignKey("admins.id"), index=True, nullable=False)
@@ -41,24 +52,27 @@ class AuthCredential(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     principal_type = Column(String, nullable=False)  # 'admin' | 'user'
-    principal_id = Column(String, nullable=False)    # admin_id or user_id
+    principal_id = Column(String, nullable=False)  # admin_id or user_id
     principal_name = Column(String, nullable=False)  # principal name
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
 
 class AuthToken(Base):
     __tablename__ = "auth_tokens"
     id = Column(Integer, primary_key=True)
     token = Column(String, unique=True, index=True, nullable=False)
     principal_type = Column(String, nullable=False)  # 'admin' | 'user'
-    principal_id = Column(String, nullable=False)    # admin_id or user_id
+    principal_id = Column(String, nullable=False)  # admin_id or user_id
     principal_name = Column(String, nullable=False)  # principal name
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
 
 class BaseResume(Base):
     __tablename__ = "base_resumes"
     user_id = Column(String, primary_key=True)
     content_text = Column(Text, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
 
 class Application(Base):
     __tablename__ = "applications"
@@ -77,6 +91,7 @@ class Application(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
+
 class JobDescription(Base):
     __tablename__ = "job_descriptions"
     id = Column(Integer, primary_key=True)
@@ -84,6 +99,7 @@ class JobDescription(Base):
     application_id = Column(Integer, index=True, nullable=False)
     jd_text = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
 
 class StoredFile(Base):
     __tablename__ = "stored_files"

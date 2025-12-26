@@ -1,7 +1,12 @@
-
 "use client";
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import Sidebar from "./Sidebar";
 import { api, getToken, setToken } from "../lib/api";
 
@@ -27,7 +32,8 @@ export default function ClientShell({ children }) {
     if (savedScope) {
       try {
         const s = JSON.parse(savedScope);
-        if (s?.mode === "user" && s?.userId) setScope({ mode: "user", userId: s.userId });
+        if (s?.mode === "user" && s?.userId)
+          setScope({ mode: "user", userId: s.userId });
         else setScope({ mode: "all", userId: null });
       } catch {}
     }
@@ -48,7 +54,7 @@ export default function ClientShell({ children }) {
         const me = await api("/v1/me");
         setPrincipal(me);
         const u = await api("/v1/users");
-        const items = Array.isArray(u) ? u : (u.items || u.users || []);
+        const items = Array.isArray(u) ? u : u.items || u.users || [];
         setUsers(items);
       } catch (e) {
         // token invalid; reset
@@ -65,7 +71,9 @@ export default function ClientShell({ children }) {
     if (!mounted) return;
     localStorage.setItem("careeros_scope", JSON.stringify(scope));
     try {
-      window.dispatchEvent(new CustomEvent("careeros:scope", { detail: scope }));
+      window.dispatchEvent(
+        new CustomEvent("careeros:scope", { detail: scope })
+      );
       // Back-compat: some pages listen for this.
       window.dispatchEvent(new Event("careeros:user-changed"));
     } catch (e) {}

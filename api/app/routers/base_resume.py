@@ -9,6 +9,7 @@ from ..auth import get_principal, Principal
 
 router = APIRouter()
 
+
 def get_db():
     db = SessionLocal()
     try:
@@ -16,8 +17,10 @@ def get_db():
     finally:
         db.close()
 
+
 class BaseResumeIn(BaseModel):
     content_text: str = Field(..., min_length=20)
+
 
 @router.put("/users/{user_id}/base-resume")
 def put_base_resume(
@@ -39,10 +42,13 @@ def put_base_resume(
         br.content_text = payload.content_text
         br.updated_at = now
     else:
-        br = BaseResume(user_id=user_id, content_text=payload.content_text, updated_at=now)
+        br = BaseResume(
+            user_id=user_id, content_text=payload.content_text, updated_at=now
+        )
         db.add(br)
     db.commit()
     return {"ok": True, "user_id": user_id, "updated_at": now.isoformat()}
+
 
 @router.get("/users/{user_id}/base-resume")
 def get_base_resume(
@@ -53,4 +59,8 @@ def get_base_resume(
     br = db.get(BaseResume, user_id)
     if not br:
         raise HTTPException(404, "Base resume not found")
-    return {"user_id": user_id, "content_text": br.content_text, "updated_at": br.updated_at.isoformat()}
+    return {
+        "user_id": user_id,
+        "content_text": br.content_text,
+        "updated_at": br.updated_at.isoformat(),
+    }
