@@ -9,12 +9,14 @@ from ..auth import get_principal, Principal
 
 router = APIRouter()
 
+
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
 
 @router.get("/files/{file_id}")
 def download_file(

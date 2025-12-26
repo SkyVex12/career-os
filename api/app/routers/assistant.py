@@ -40,7 +40,9 @@ def list_messages(thread_id: str):
 def add_message(thread_id: str, payload: MessageIn):
     if thread_id not in _THREADS:
         _THREADS[thread_id] = []
-    msg = MessageOut(id=str(uuid.uuid4()), created_at=datetime.utcnow(), **payload.model_dump())
+    msg = MessageOut(
+        id=str(uuid.uuid4()), created_at=datetime.utcnow(), **payload.model_dump()
+    )
     _THREADS[thread_id].append(msg)
 
     if payload.role == "user":

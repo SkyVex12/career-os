@@ -120,7 +120,15 @@ export default function ManageUsersPage() {
                 onChange={(e) => setDob(e.target.value)}
               />
 
-              <button className="pill pillBtn" type="submit">
+              <label className="label">Date of birth</label>
+              <input
+                className="input"
+                type="date"
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+              />
+
+              <button className="btnPrimary" type="submit">
                 Create & Link
               </button>
             </div>

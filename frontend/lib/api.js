@@ -13,10 +13,17 @@ async function request(path, init = {}) {
 
   const text = await res.text();
   let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
 
   if (!res.ok) {
-    const msg = (data && (data.detail || data.message)) ? (data.detail || data.message) : `HTTP ${res.status}`;
+    const msg =
+      data && (data.detail || data.message)
+        ? data.detail || data.message
+        : `HTTP ${res.status}`;
     throw new Error(msg);
   }
   return data;
@@ -30,7 +37,9 @@ export async function putBaseResume(userId, contentText) {
 }
 
 export async function getBaseResume(userId) {
-  return request(`/v1/users/${encodeURIComponent(userId)}/base-resume`, { method: "GET" });
+  return request(`/v1/users/${encodeURIComponent(userId)}/base-resume`, {
+    method: "GET",
+  });
 }
 
 export async function generateResume(payload) {

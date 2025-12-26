@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
@@ -44,14 +44,18 @@ export default function ApplicationsPage() {
   const [userId, setUserId] = useState("u1");
   useEffect(() => {
     const read = () => {
-      try { setUserId(localStorage.getItem("careeros_user_id") || "u1"); } catch {}
+      try {
+        setUserId(localStorage.getItem("careeros_user_id") || "u1");
+      } catch {}
     };
     read();
     // Same-tab updates (we dispatch this event when scope changes)
     const onScope = () => read();
     window.addEventListener("careeros:scope", onScope);
     // Cross-tab updates
-    const onStorage = (e) => { if (e.key === "careeros_user_id" || e.key === "careeros_scope") read(); };
+    const onStorage = (e) => {
+      if (e.key === "careeros_user_id" || e.key === "careeros_scope") read();
+    };
     window.addEventListener("storage", onStorage);
     return () => {
       window.removeEventListener("careeros:scope", onScope);
@@ -78,8 +82,15 @@ export default function ApplicationsPage() {
         page_size: String(listPageSize),
         ...(filterStage ? { stage: filterStage } : {}),
       });
-      const data = await apiFetch(`/v1/applications/paged?${params.toString()}`);
-      setListItems((data.items || []).map((x) => ({ ...x, stage: stageNormalize(x.stage) })));
+      const data = await apiFetch(
+        `/v1/applications/paged?${params.toString()}`
+      );
+      setListItems(
+        (data.items || []).map((x) => ({
+          ...x,
+          stage: stageNormalize(x.stage),
+        }))
+      );
       setListTotal(data.total || 0);
       setStatus("");
     } catch (e) {
@@ -95,12 +106,17 @@ export default function ApplicationsPage() {
         page: String(cur.page),
         page_size: String(cur.page_size),
       });
-      const data = await apiFetch(`/v1/applications/kanban?${params.toString()}`);
+      const data = await apiFetch(
+        `/v1/applications/kanban?${params.toString()}`
+      );
       setKb((prev) => ({
         ...prev,
         [stage]: {
           ...prev[stage],
-          items: (data.items || []).map((x) => ({ ...x, stage: stageNormalize(x.stage) })),
+          items: (data.items || []).map((x) => ({
+            ...x,
+            stage: stageNormalize(x.stage),
+          })),
           total: data.total || 0,
           page: data.page || prev[stage].page,
           page_size: data.page_size || prev[stage].page_size,
@@ -155,8 +171,17 @@ export default function ApplicationsPage() {
     if (view !== "kanban") return;
     for (const s of STAGES) loadKanbanStage(s);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, kb.applied.page, kb.interview.page, kb.offer.page, kb.rejected.page,
-      kb.applied.page_size, kb.interview.page_size, kb.offer.page_size, kb.rejected.page_size]);
+  }, [
+    userId,
+    kb.applied.page,
+    kb.interview.page,
+    kb.offer.page,
+    kb.rejected.page,
+    kb.applied.page_size,
+    kb.interview.page_size,
+    kb.offer.page_size,
+    kb.rejected.page_size,
+  ]);
 
   const listPageCount = Math.max(1, Math.ceil(listTotal / listPageSize));
 
@@ -164,16 +189,25 @@ export default function ApplicationsPage() {
     const next = stageNormalize(stage);
 
     // optimistic update across list + kanban
-    setListItems((prev) => prev.map((x) => (x.id === id ? { ...x, stage: next } : x)));
+    setListItems((prev) =>
+      prev.map((x) => (x.id === id ? { ...x, stage: next } : x))
+    );
     setKb((prev) => {
       const nextKb = { ...prev };
       // remove from all columns
       for (const s of STAGES) {
-        nextKb[s] = { ...nextKb[s], items: nextKb[s].items.filter((x) => x.id !== id) };
+        nextKb[s] = {
+          ...nextKb[s],
+          items: nextKb[s].items.filter((x) => x.id !== id),
+        };
       }
       // add to top of target column
       const moved = listItems.find((x) => x.id === id) || null;
-      if (moved) nextKb[next] = { ...nextKb[next], items: [{ ...moved, stage: next }, ...nextKb[next].items] };
+      if (moved)
+        nextKb[next] = {
+          ...nextKb[next],
+          items: [{ ...moved, stage: next }, ...nextKb[next].items],
+        };
       return nextKb;
     });
 
@@ -214,43 +248,128 @@ export default function ApplicationsPage() {
 
   return (
     <main className="container">
-      <TopbarClient title="Applications" subtitle="Search + filter on backend. Kanban has per-column pagination." />
+      <TopbarClient
+        title="Applications"
+        subtitle="Search + filter on backend. Kanban has per-column pagination."
+      />
 
       <div className="card cardPad" style={{ marginBottom: 12 }}>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <button className={`btn ${view==="kanban" ? "btnPrimary" : ""}`} onClick={() => setView("kanban")}>Kanban</button>
-          <button className={`btn ${view==="list" ? "btnPrimary" : ""}`} onClick={() => setView("list")}>List</button>
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            className={`btn ${view === "kanban" ? "btnPrimary" : ""}`}
+            onClick={() => setView("kanban")}
+          >
+            Kanban
+          </button>
+          <button
+            className={`btn ${view === "list" ? "btnPrimary" : ""}`}
+            onClick={() => setView("list")}
+          >
+            List
+          </button>
 
           <div style={{ flex: 1 }} />
 
-          <input className="input" style={{ width: 320 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search (company / role / url)..." />
+          <input
+            className="input"
+            style={{ width: 320 }}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search (company / role / url)..."
+          />
 
           {view === "list" ? (
-            <select className="select" value={filterStage} onChange={(e) => setFilterStage(e.target.value)}>
+            <select
+              className="select"
+              value={filterStage}
+              onChange={(e) => setFilterStage(e.target.value)}
+            >
               <option value="">All stages</option>
-              {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+              {STAGES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
             </select>
           ) : (
             <span className="chip">Kanban = stages columns</span>
           )}
 
-          <input className="input" style={{ width: 140 }} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} placeholder="date_from (YYYY-MM-DD)" />
-          <input className="input" style={{ width: 140 }} value={dateTo} onChange={(e) => setDateTo(e.target.value)} placeholder="date_to (YYYY-MM-DD)" />
+          <input
+            className="input"
+            style={{ width: 140 }}
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            placeholder="date_from (YYYY-MM-DD)"
+          />
+          <input
+            className="input"
+            style={{ width: 140 }}
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            placeholder="date_to (YYYY-MM-DD)"
+          />
 
-          <button className="btn btnGhost" onClick={() => (view==="list" ? loadList() : loadKanbanAll())}>Refresh</button>
+          <button
+            className="btn btnGhost"
+            onClick={() => (view === "list" ? loadList() : loadKanbanAll())}
+          >
+            Refresh
+          </button>
         </div>
 
-        {status ? <div className="small" style={{ marginTop: 10 }}>{status}</div> : null}
+        {status ? (
+          <div className="small" style={{ marginTop: 10 }}>
+            {status}
+          </div>
+        ) : null}
 
         {view === "list" ? (
-          <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
-            <button className="btn" disabled={listPage <= 1} onClick={() => setListPage((p) => Math.max(1, p - 1))}>Prev</button>
-            <div className="small">Page <b>{listPage}</b> / {listPageCount} &nbsp;•&nbsp; Total <b>{listTotal}</b></div>
-            <button className="btn" disabled={listPage >= listPageCount} onClick={() => setListPage((p) => Math.min(listPageCount, p + 1))}>Next</button>
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              marginTop: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              className="btn"
+              disabled={listPage <= 1}
+              onClick={() => setListPage((p) => Math.max(1, p - 1))}
+            >
+              Prev
+            </button>
+            <div className="small">
+              Page <b>{listPage}</b> / {listPageCount} &nbsp;•&nbsp; Total{" "}
+              <b>{listTotal}</b>
+            </div>
+            <button
+              className="btn"
+              disabled={listPage >= listPageCount}
+              onClick={() => setListPage((p) => Math.min(listPageCount, p + 1))}
+            >
+              Next
+            </button>
 
             <div style={{ width: 8 }} />
             <span className="small">Page size</span>
-            <select className="select" value={listPageSize} onChange={(e) => { setListPage(1); setListPageSize(Number(e.target.value)); }}>
+            <select
+              className="select"
+              value={listPageSize}
+              onChange={(e) => {
+                setListPage(1);
+                setListPageSize(Number(e.target.value));
+              }}
+            >
               <option value={25}>25</option>
               <option value={50}>50</option>
               <option value={100}>100</option>
@@ -282,12 +401,32 @@ export default function ApplicationsPage() {
                   <td>{a.company}</td>
                   <td>{a.role}</td>
                   <td>
-                    <select className="select" value={stageNormalize(a.stage)} onChange={(e) => updateStage(a.id, e.target.value)}>
-                      {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    <select
+                      className="select"
+                      value={stageNormalize(a.stage)}
+                      onChange={(e) => updateStage(a.id, e.target.value)}
+                    >
+                      {STAGES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
                     </select>
                   </td>
-                  <td className="small">{a.created_at ? new Date(a.created_at).toLocaleDateString() : "-"}</td>
-                  <td>{a.url ? <a href={a.url} target="_blank" rel="noreferrer">open</a> : "-"}</td>
+                  <td className="small">
+                    {a.created_at
+                      ? new Date(a.created_at).toLocaleDateString()
+                      : "-"}
+                  </td>
+                  <td>
+                    {a.url ? (
+                      <a href={a.url} target="_blank" rel="noreferrer">
+                        open
+                      </a>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -301,15 +440,71 @@ export default function ApplicationsPage() {
             return (
               <div key={stage} className="card cardPad">
                 <div className="columnHead">
-                  <div className="columnTitle" style={{ textTransform: "capitalize" }}>{stage}</div>
+                  <div
+                    className="columnTitle"
+                    style={{ textTransform: "capitalize" }}
+                  >
+                    {stage}
+                  </div>
                   <div className="columnCount">{col.total}</div>
                 </div>
 
-                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
-                  <button className="btn" disabled={col.page <= 1} onClick={() => setKb((p) => ({ ...p, [stage]: { ...p[stage], page: Math.max(1, p[stage].page - 1) } }))}>Prev</button>
-                  <div className="small">Page <b>{col.page}</b> / {pageCount}</div>
-                  <button className="btn" disabled={col.page >= pageCount} onClick={() => setKb((p) => ({ ...p, [stage]: { ...p[stage], page: Math.min(pageCount, p[stage].page + 1) } }))}>Next</button>
-                  <select className="select" value={col.page_size} onChange={(e) => setKb((p) => ({ ...p, [stage]: { ...p[stage], page: 1, page_size: Number(e.target.value) } }))}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "center",
+                    marginBottom: 10,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <button
+                    className="btn"
+                    disabled={col.page <= 1}
+                    onClick={() =>
+                      setKb((p) => ({
+                        ...p,
+                        [stage]: {
+                          ...p[stage],
+                          page: Math.max(1, p[stage].page - 1),
+                        },
+                      }))
+                    }
+                  >
+                    Prev
+                  </button>
+                  <div className="small">
+                    Page <b>{col.page}</b> / {pageCount}
+                  </div>
+                  <button
+                    className="btn"
+                    disabled={col.page >= pageCount}
+                    onClick={() =>
+                      setKb((p) => ({
+                        ...p,
+                        [stage]: {
+                          ...p[stage],
+                          page: Math.min(pageCount, p[stage].page + 1),
+                        },
+                      }))
+                    }
+                  >
+                    Next
+                  </button>
+                  <select
+                    className="select"
+                    value={col.page_size}
+                    onChange={(e) =>
+                      setKb((p) => ({
+                        ...p,
+                        [stage]: {
+                          ...p[stage],
+                          page: 1,
+                          page_size: Number(e.target.value),
+                        },
+                      }))
+                    }
+                  >
                     <option value={10}>10</option>
                     <option value={25}>25</option>
                     <option value={50}>50</option>
@@ -318,25 +513,55 @@ export default function ApplicationsPage() {
                 </div>
 
                 <div
-                  className={`dropZone ${dragOverStage === stage ? "over" : ""}`}
+                  className={`dropZone ${
+                    dragOverStage === stage ? "over" : ""
+                  }`}
                   onDragOver={(e) => onDragOver(e, stage)}
                   onDragLeave={() => setDragOverStage("")}
                   onDrop={(e) => onDrop(e, stage)}
                 >
                   {col.items.map((a) => (
-                    <div key={a.id} className="cardItem" draggable onDragStart={(e) => onDragStart(e, a.id)}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                    <div
+                      key={a.id}
+                      className="cardItem"
+                      draggable
+                      onDragStart={(e) => onDragStart(e, a.id)}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 10,
+                        }}
+                      >
                         <h4>{a.company}</h4>
                         <StageBadge stage={a.stage} />
                       </div>
                       <p>{a.role}</p>
-                      <div className="small" style={{ marginTop: 8, display: "flex", justifyContent: "space-between" }}>
-                        <span>{a.created_at ? new Date(a.created_at).toLocaleDateString() : "-"}</span>
-                        {a.url ? <a href={a.url} target="_blank" rel="noreferrer">open</a> : null}
+                      <div
+                        className="small"
+                        style={{
+                          marginTop: 8,
+                          display: "flex",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <span>
+                          {a.created_at
+                            ? new Date(a.created_at).toLocaleDateString()
+                            : "-"}
+                        </span>
+                        {a.url ? (
+                          <a href={a.url} target="_blank" rel="noreferrer">
+                            open
+                          </a>
+                        ) : null}
                       </div>
                     </div>
                   ))}
-                  {!col.items.length ? <div className="small muted">No items</div> : null}
+                  {!col.items.length ? (
+                    <div className="small muted">No items</div>
+                  ) : null}
                 </div>
               </div>
             );
