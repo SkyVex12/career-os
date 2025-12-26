@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..auth import Principal, get_db, get_principal
-from ..models import AdminUser, Application, BaseResume, StoredFile
+from ..models import AdminUser, Application, BaseResume, StoredFile, User
 from ..storage import save_bytes
 from ..docx_render import render_resume
 
@@ -19,11 +19,13 @@ from ..docx_render import render_resume
 router = APIRouter(prefix="/v1", tags=["ingest"])
 
 
-def _admin_user_ids(db: Session, admin_id: str) -> List[str]:
-    return [
+def _admin_users(db: Session, admin_id: str) -> List[User]:
+    user_ids = [
         r.user_id
         for r in db.query(AdminUser).filter(AdminUser.admin_id == admin_id).all()
     ]
+
+    return db.query(User).filter(User.id.in_(user_ids)).all()
 
 
 def _ensure_access(db: Session, principal: Principal, user_id: str) -> None:
@@ -84,18 +86,15 @@ def apply_and_generate(
     if existing:
         app_row = existing
     else:
-        app_id = f"app{now.strftime('%Y%m%d%H%M%S')}{now.microsecond}"
         app_row = Application(
-            id=app_id,
             user_id=payload.user_id,
+            admin_id=principal.id if principal.type == "admin" else None,
             url=payload.url,
             company=payload.company,
             role=payload.position,
             stage="applied",
             created_at=now,
             updated_at=now,
-            created_by_type=principal.type,
-            created_by_id=principal.id,
         )
         db.add(app_row)
 
@@ -112,9 +111,15 @@ def apply_and_generate(
     docx_bytes = render_resume(ctx)
 
     file_id = f"file{now.strftime('%Y%m%d%H%M%S')}{now.microsecond}"
-    rel_path = save_bytes(file_id + ".docx", docx_bytes)
+    user = db.get(User, payload.user_id)
+    rel_path = save_bytes(
+        f"{user.name}-{user.id}", app_row.id, file_id + ".docx", docx_bytes
+    )
     stored = StoredFile(
         id=file_id,
+        user_id=payload.user_id,
+        application_id=app_row.id,
+        kind="resume_docx",
         path=rel_path,
         filename="resume.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -148,15 +153,15 @@ def apply_and_generate_batch(
     if principal.type != "admin":
         raise HTTPException(status_code=403, detail="Admin required")
 
-    user_ids = _admin_user_ids(db, principal.id)
+    users = _admin_users(db, principal.id)
     now = dt.datetime.utcnow()
     results = []
-    for uid in user_ids:
+    for user in users:
         try:
             # create per-user
             existing = (
                 db.query(Application)
-                .filter(Application.user_id == uid, Application.url == payload.url)
+                .filter(Application.user_id == user.id, Application.url == payload.url)
                 .order_by(Application.created_at.desc())
                 .first()
             )
@@ -166,19 +171,18 @@ def apply_and_generate_batch(
                 app_id = f"app{dt.datetime.utcnow().strftime('%Y%m%d%H%M%S')}{dt.datetime.utcnow().microsecond}"
                 app_row = Application(
                     id=app_id,
-                    user_id=uid,
+                    user_id=user.id,
+                    admin_id=principal.id if principal.type == "admin" else None,
                     url=payload.url,
                     company=payload.company,
                     role=payload.position,
                     stage="applied",
                     created_at=dt.datetime.utcnow(),
                     updated_at=dt.datetime.utcnow(),
-                    created_by_type=principal.type,
-                    created_by_id=principal.id,
                 )
                 db.add(app_row)
 
-            ctx = _load_base_resume_context(db, uid)
+            ctx = _load_base_resume_context(db, user.id)
             ctx = {
                 **ctx,
                 "target_company": payload.company,
@@ -189,9 +193,14 @@ def apply_and_generate_batch(
             docx_bytes = render_resume(ctx)
 
             file_id = f"file{dt.datetime.utcnow().strftime('%Y%m%d%H%M%S')}{dt.datetime.utcnow().microsecond}"
-            rel_path = save_bytes(file_id + ".docx", docx_bytes)
+            rel_path = save_bytes(
+                f"{user.name}-{user.id}", app_row.id, file_id + ".docx", docx_bytes
+            )
             stored = StoredFile(
                 id=file_id,
+                user_id=user.id,
+                application_id=app_row.id,
+                kind="resume_docx",
                 path=rel_path,
                 filename="resume.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -204,7 +213,7 @@ def apply_and_generate_batch(
             results.append(
                 {
                     "ok": True,
-                    "user_id": uid,
+                    "user_id": user.id,
                     "application_id": app_row.id,
                     "resume_docx_file_id": file_id,
                     "resume_download_url": f"/v1/files/{file_id}/download",
@@ -212,7 +221,7 @@ def apply_and_generate_batch(
                 }
             )
         except Exception as e:
-            results.append({"ok": False, "user_id": uid, "error": str(e)})
+            results.append({"ok": False, "user_id": user.id, "error": str(e)})
 
     db.commit()
     return {"results": results}
