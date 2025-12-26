@@ -14,10 +14,11 @@ def safe_filename(s: str) -> str:
     return s[:80] or "file"
 
 
-def save_bytes(user_id: str, application_id: int, filename: str, data: bytes) -> Path:
-    app_dir = STORAGE_DIR / user_id / str(application_id)
+def save_bytes(user_info: str, application_id: str, filename: str, data: bytes) -> Path:
+    app_dir = STORAGE_DIR / user_info / application_id
     app_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     path = app_dir / f"{ts}_{filename}"
     path.write_bytes(data)
-    return path
+
+    return str(path)

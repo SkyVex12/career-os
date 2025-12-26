@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from ..auth import Principal, get_db, get_principal
-from ..models import Application, AdminUser
+from ..models import Application, AdminUser, Admin, User
 
 
 router = APIRouter(prefix="/v1", tags=["applications"])
@@ -54,48 +54,16 @@ def exists_application(
         "application": {
             "id": row.id,
             "user_id": row.user_id,
+            "created_by": (
+                db.get(Admin, row.admin_id).name
+                if row.admin_id
+                else db.get(User, row.user_id).name
+            ),
             "company": row.company,
             "role": row.role,
             "stage": row.stage,
             "url": row.url,
             "created_at": row.created_at.isoformat() if row.created_at else None,
-            "created_by_type": row.created_by_type,
-            "created_by_id": row.created_by_id,
-        },
-    }
-
-
-@router.get("/applications/exists-any")
-def exists_any_application(
-    url: str,
-    db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
-):
-    if principal.type != "admin":
-        raise HTTPException(status_code=403, detail="Admin required")
-
-    # any of admin's linked users
-    q = (
-        db.query(Application)
-        .join(AdminUser, AdminUser.user_id == Application.user_id)
-        .filter(AdminUser.admin_id == principal.id, Application.url == url)
-        .order_by(Application.created_at.desc())
-    )
-    row = q.first()
-    if not row:
-        return {"exists": False}
-    return {
-        "exists": True,
-        "application": {
-            "id": row.id,
-            "user_id": row.user_id,
-            "company": row.company,
-            "role": row.role,
-            "stage": row.stage,
-            "url": row.url,
-            "created_at": row.created_at.isoformat() if row.created_at else None,
-            "created_by_type": row.created_by_type,
-            "created_by_id": row.created_by_id,
         },
     }
 
@@ -144,13 +112,12 @@ def list_applications(
         return {
             "id": a.id,
             "user_id": a.user_id,
+            "admin_id": a.admin_id,
             "company": a.company,
             "role": a.role,
             "stage": a.stage,
             "url": a.url,
             "created_at": a.created_at.isoformat() if a.created_at else None,
-            "created_by_type": a.created_by_type,
-            "created_by_id": a.created_by_id,
         }
 
     return {
