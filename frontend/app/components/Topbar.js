@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, setToken } from "../lib/api";
 import { useScope } from "./ClientShell";
+import toast from "react-hot-toast";
 
 export default function Topbar({
   title = "CareerOS",
@@ -47,6 +48,7 @@ export default function Topbar({
     setPrincipal(null);
     setUsers([]);
     setScope({ mode: "all", userId: null });
+    toast.success("Logged out successfully");
     router.push("/login");
   }
 

@@ -76,6 +76,7 @@ export default function SignupPage() {
       });
 
       setToken(res.token || "");
+      toast.success("Account created successfully");
       router.push("/dashboard");
     } catch (err) {
       setStatus(String(err?.message || err));

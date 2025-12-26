@@ -795,3 +795,16 @@ textarea:focus {
   margin: 6px;
   font-weight: 800;
 }
+
+.listRow {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.03)
+  );
+  box-shadow: var(--shadow2);
+  padding: 14px;
+  margin-bottom: 5px;
+}

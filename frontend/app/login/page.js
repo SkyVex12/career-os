@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, setToken } from "../lib/api";
+import toast from "react-hot-toast";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       setToken(res.token || "");
+      toast.success("Logged in successfully");
       router.push("/dashboard");
     } catch (e) {
       setStatus(String(e?.message || e));
