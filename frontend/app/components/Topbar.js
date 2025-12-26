@@ -10,8 +10,8 @@ export default function Topbar({
   subtitle = "Application analytics + document generator",
 }) {
   const router = useRouter();
-  const { principal, setPrincipal, users, setUsers, scope, setScope } = useScope();
-  console.log("Topbar principal:", principal);
+  const { principal, setPrincipal, users, setUsers, scope, setScope } =
+    useScope();
   const [err, setErr] = useState("");
   const [mounted, setMounted] = useState(false);
 
@@ -26,7 +26,7 @@ export default function Topbar({
         // For admin: show users under this admin (via /v1/users)
         // For user: backend may still return a list (safe to show), but scope selector won't appear.
         const u = await api("/v1/users");
-        const items = Array.isArray(u) ? u : (u.items || u.users || []);
+        const items = Array.isArray(u) ? u : u.items || u.users || [];
         setUsers(items);
       } catch (e) {
         // If not logged in, keep principal null and avoid noisy errors on public pages.
@@ -86,7 +86,11 @@ export default function Topbar({
             <div className="pill">
               <strong>{principal.type === "admin" ? "Admin" : "User"}</strong>
               <span className="muted">
-                {principal.name ? ` - ${principal.name}` : ""} ({principal.type === "admin" ? principal.admin_id : principal.user_id})
+                {principal.name ? ` - ${principal.name}` : ""} (
+                {principal.type === "admin"
+                  ? principal.admin_id
+                  : principal.user_id}
+                )
               </span>
             </div>
 
@@ -96,10 +100,14 @@ export default function Topbar({
                   Scope
                 </span>
                 <select
-                  value={scope.mode === "all" ? "all" : (scope.userId || "all")}
+                  value={scope.mode === "all" ? "all" : scope.userId || "all"}
                   onChange={(e) => {
                     const v = e.target.value;
-                    setScope(v === "all" ? { mode: "all", userId: null } : { mode: "user", userId: v });
+                    setScope(
+                      v === "all"
+                        ? { mode: "all", userId: null }
+                        : { mode: "user", userId: v }
+                    );
                   }}
                   aria-label="Scope selector"
                 >

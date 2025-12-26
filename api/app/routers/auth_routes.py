@@ -69,7 +69,7 @@ def signup(payload: SignupIn, db: Session = Depends(get_db)):
         )
         db.add(admin)
 
-        db.add(AuthCredential(email=email, password_hash=hash_password(payload.password), principal_type="admin", principal_id=admin_id, created_at=now))
+        db.add(AuthCredential(email=email, password_hash=hash_password(payload.password), principal_type="admin", principal_id=admin_id, principal_name=full_name, created_at=now))
         token = mint_token(db, "admin", admin_id, full_name)
         db.commit()
         return {"token": token, "principal": {"type": "admin", "admin_id": admin_id, "name": full_name}}
@@ -86,7 +86,7 @@ def signup(payload: SignupIn, db: Session = Depends(get_db)):
         updated_at=now,
     )
     db.add(user)
-    db.add(AuthCredential(email=email, password_hash=hash_password(payload.password), principal_type="user", principal_id=user_id, created_at=now))
+    db.add(AuthCredential(email=email, password_hash=hash_password(payload.password), principal_type="user", principal_id=user_id, principal_name=full_name, created_at=now))
 
     admin_ids = set(payload.admin_ids or [])
     if payload.admin_id:

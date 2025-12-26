@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -19,7 +18,7 @@ export default function ManageUsersPage() {
 
   async function refresh() {
     const res = await api("/v1/users");
-    const list = Array.isArray(res) ? res : (res.items || []);
+    const list = Array.isArray(res) ? res : res.items || [];
     setItems(list);
   }
 
@@ -64,7 +63,9 @@ export default function ManageUsersPage() {
     return (
       <main className="container">
         <Topbar title="Manage Users" subtitle="Admin only" />
-        <div className="card" style={{ gap:12, marginTop: 12 }}>Forbidden (admin only).</div>
+        <div className="card" style={{ gap: 12, marginTop: 12 }}>
+          Forbidden (admin only).
+        </div>
       </main>
     );
   }
@@ -78,43 +79,79 @@ export default function ManageUsersPage() {
           <div className="cardTitle">Create new user</div>
           <form onSubmit={onCreate}>
             <label className="label">Email</label>
-            <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input
+              className="input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
 
             <label className="label">Password</label>
-            <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <input
+              className="input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
 
             <div className="row">
               <div>
                 <label className="label">First name</label>
-                <input className="input" value={firstname} onChange={(e) => setFirstname(e.target.value)} />
+                <input
+                  className="input"
+                  value={firstname}
+                  onChange={(e) => setFirstname(e.target.value)}
+                />
               </div>
               <div>
                 <label className="label">Last name</label>
-                <input className="input" value={lastname} onChange={(e) => setLastname(e.target.value)} />
+                <input
+                  className="input"
+                  value={lastname}
+                  onChange={(e) => setLastname(e.target.value)}
+                />
               </div>
             </div>
+            <div className="row">
+              <label className="label">Date of birth</label>
+              <input
+                className="input"
+                type="date"
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+              />
 
-            <label className="label">Date of birth</label>
-            <input className="input" type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
-
-            <button className="btnPrimary" type="submit">Create & Link</button>
+              <button className="pill pillBtn" type="submit">
+                Create & Link
+              </button>
+            </div>
             {status ? <div className="status">{status}</div> : null}
           </form>
         </div>
 
         <div className="card">
           <div className="cardTitle">My linked users</div>
-          <div className="muted" style={{ marginBottom: 10 }}>Total: {items.length}</div>
+          <div className="muted" style={{ marginBottom: 10 }}>
+            Total: {items.length}
+          </div>
           <div className="list">
-            {items.map(u => (
+            {items.map((u) => (
               <div key={u.id} className="listRow">
                 <div>
-                  <div style={{ fontWeight: 700 }}>{u.name || `${u.firstname || ""} ${u.lastname || ""}`.trim() || u.id}</div>
-                  <div className="muted">{u.id}{u.email ? ` • ${u.email}` : ""}</div>
+                  <div style={{ fontWeight: 700 }}>
+                    {u.name ||
+                      `${u.firstname || ""} ${u.lastname || ""}`.trim() ||
+                      u.id}
+                  </div>
+                  <div className="muted">
+                    {u.id}
+                    {u.email ? ` • ${u.email}` : ""}
+                  </div>
                 </div>
               </div>
             ))}
-            {!items.length ? <div className="muted">No users linked yet.</div> : null}
+            {!items.length ? (
+              <div className="muted">No users linked yet.</div>
+            ) : null}
           </div>
         </div>
       </div>
