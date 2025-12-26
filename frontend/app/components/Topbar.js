@@ -12,7 +12,6 @@ export default function Topbar({
   const router = useRouter();
   const { principal, setPrincipal, users, setUsers, scope, setScope } =
     useScope();
-  console.log("Topbar principal:", principal);
   const [err, setErr] = useState("");
   const [mounted, setMounted] = useState(false);
 

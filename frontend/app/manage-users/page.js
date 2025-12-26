@@ -111,18 +111,27 @@ export default function ManageUsersPage() {
                 />
               </div>
             </div>
+            <div className="row">
+              <label className="label">Date of birth</label>
+              <input
+                className="input"
+                type="date"
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+              />
 
-            <label className="label">Date of birth</label>
-            <input
-              className="input"
-              type="date"
-              value={dob}
-              onChange={(e) => setDob(e.target.value)}
-            />
+              <label className="label">Date of birth</label>
+              <input
+                className="input"
+                type="date"
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+              />
 
-            <button className="btnPrimary" type="submit">
-              Create & Link
-            </button>
+              <button className="btnPrimary" type="submit">
+                Create & Link
+              </button>
+            </div>
             {status ? <div className="status">{status}</div> : null}
           </form>
         </div>

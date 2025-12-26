@@ -22,7 +22,7 @@ export default function SignupPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await api("/v1/admins");
+        const res = await api("/v1/admins/public");
         const items = Array.isArray(res) ? res : res.items || res.admins || [];
         setAdmins(items);
       } catch (e) {
@@ -133,6 +133,7 @@ export default function SignupPage() {
               <div className="authLabel">First name</div>
               <input
                 className="authInput"
+                type="text"
                 value={firstname}
                 onChange={(e) => setFirstname(e.target.value)}
                 placeholder="Goran"
@@ -143,6 +144,7 @@ export default function SignupPage() {
               <div className="authLabel">Last name</div>
               <input
                 className="authInput"
+                type="text"
                 value={lastname}
                 onChange={(e) => setLastname(e.target.value)}
                 placeholder="M."
@@ -191,6 +193,7 @@ export default function SignupPage() {
               <div className="authLabel">Link to admins (optional)</div>
               <input
                 className="authInput"
+                type="text"
                 value={adminQuery}
                 onChange={(e) => setAdminQuery(e.target.value)}
                 placeholder="Search by admin email or name…"

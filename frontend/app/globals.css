@@ -359,12 +359,14 @@ option {
 input[type="text"],
 input[type="email"],
 input[type="password"],
+input[type="date"],
 textarea {
   background: rgba(0, 0, 0, 0.18);
   border: 1px solid rgba(255, 255, 255, 0.14);
   color: rgba(255, 255, 255, 0.92);
   padding: 10px 12px;
   border-radius: 14px;
+  margin: 5px;
   outline: none;
 }
 textarea {
@@ -773,4 +775,23 @@ textarea:focus {
   border-color: rgba(96, 165, 250, 0.55);
   box-shadow: var(--ring);
   background: rgba(96, 165, 250, 0.08);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.spaceBetween {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.label {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.76);
+  margin: 6px;
+  font-weight: 800;
 }
