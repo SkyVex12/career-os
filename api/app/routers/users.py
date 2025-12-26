@@ -168,3 +168,69 @@ def get_base_resume(
         .first()
     )
     return {"content_text": br.content_text if br else ""}
+
+
+class LinkUserIn(BaseModel):
+    user_id: str
+
+
+@router.get("/admin/users/all")
+def admin_list_all_users(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    require_admin(principal)
+    rows = db.query(User).order_by(User.created_at.desc()).all()
+    return {"items": [UserOut.model_validate(u).model_dump() for u in rows]}
+
+
+@router.post("/admin/users/link")
+def admin_link_user(
+    payload: LinkUserIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    require_admin(principal)
+
+    # verify user exists
+    u = db.query(User).filter(User.id == payload.user_id).first()
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    now = dt.datetime.utcnow()
+    existing = (
+        db.query(AdminUser)
+        .filter(
+            AdminUser.admin_id == principal.id, AdminUser.user_id == payload.user_id
+        )
+        .first()
+    )
+    if existing:
+        return {"ok": True}
+
+    db.add(AdminUser(admin_id=principal.id, user_id=payload.user_id, created_at=now))
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/admin/users/unlink")
+def admin_unlink_user(
+    payload: LinkUserIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    require_admin(principal)
+
+    row = (
+        db.query(AdminUser)
+        .filter(
+            AdminUser.admin_id == principal.id, AdminUser.user_id == payload.user_id
+        )
+        .first()
+    )
+    if row is None:
+        return {"ok": True}
+
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
