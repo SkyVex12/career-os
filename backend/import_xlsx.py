@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, time, timezone
 from pathlib import Path
 from typing import Any, Optional
+import uuid
 
 from openpyxl import load_workbook
 import time
@@ -169,7 +170,7 @@ def main():
                     else:
                         skipped += 1
                     continue
-                app_id = f"app{dt.strftime('%Y%m%d%H%M%S')}{dt.microsecond}"
+                app_id = f"app_{uuid.uuid4().hex}"
                 db.add(
                     Application(
                         id=app_id,
