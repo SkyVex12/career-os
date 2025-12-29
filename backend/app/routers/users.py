@@ -82,8 +82,8 @@ def admin_create_user_and_link(
     user = User(
         id=user_id,
         name=f"{payload.firstname or ''} {payload.lastname or ''}".strip() or None,
-        firstname=payload.firstname,
-        lastname=payload.lastname,
+        first_name=payload.firstname,
+        last_name=payload.lastname,
         dob=payload.dob,
         created_at=now,
         updated_at=now,
@@ -95,6 +95,7 @@ def admin_create_user_and_link(
         password_hash=hash_password(payload.password),
         principal_type="user",
         principal_id=user_id,
+        principal_name=user.first_name + " " + user.last_name,
         created_at=now,
     )
     db.add(cred)
