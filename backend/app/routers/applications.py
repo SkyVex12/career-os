@@ -97,6 +97,7 @@ def list_applications(
                 Application.role.ilike(like),
                 Application.stage.ilike(like),
                 Application.url.ilike(like),
+                Application.source_site.ilike(like),
             )
         )
 
@@ -117,6 +118,7 @@ def list_applications(
             "role": a.role,
             "stage": a.stage,
             "url": a.url,
+            "source_site": a.source_site,
             "created_at": a.created_at.isoformat() if a.created_at else None,
         }
 

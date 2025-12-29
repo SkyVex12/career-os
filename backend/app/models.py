@@ -84,11 +84,29 @@ class Application(Base):
     company = Column(String, nullable=False)
     role = Column(String, nullable=False)
     url = Column(String, index=True, nullable=False)
+    source_site = Column(String, nullable=True)
     stage = Column(String, default="applied")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+
+
+class JDKeyInfo(Base):
+    __tablename__ = "jd_key_info"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String, index=True, nullable=False)
+    source_url = Column(String, index=True, nullable=True)
+    url_hash = Column(String, index=True, nullable=True)
+    text_hash = Column(String, index=True, nullable=False)
+    scope = Column(String, default="fragment", nullable=False)  # canonical|fragment
+    keys_json = Column(Text, nullable=False)
+    model = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "url_hash", "scope", "text_hash", name="uq_jdkey_user_url_scope_text"),
+    )
 class JobDescription(Base):
     __tablename__ = "job_descriptions"
     id = Column(Integer, primary_key=True)

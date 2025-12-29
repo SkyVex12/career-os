@@ -62,6 +62,7 @@ def _load_base_resume_context(db: Session, user_id: str) -> Dict[str, Any]:
 class ApplyAndGenerateIn(BaseModel):
     user_id: str
     url: str
+    source_site: Optional[str] = None
     company: str
     position: str
     jd_text: str
@@ -86,8 +87,11 @@ def apply_and_generate(
     if existing:
         app_row = existing
     else:
+        app_id = f"app{dt.datetime.utcnow().strftime('%Y%m%d%H%M%S')}{dt.datetime.utcnow().microsecond}"
         app_row = Application(
+            id=app_id,
             user_id=payload.user_id,
+            source_site=payload.source_site,
             admin_id=principal.id if principal.type == "admin" else None,
             url=payload.url,
             company=payload.company,
@@ -139,6 +143,7 @@ def apply_and_generate(
 
 class ApplyAndGenerateBatchIn(BaseModel):
     url: str
+    source_site: Optional[str] = None
     company: str
     position: str
     jd_text: str
@@ -174,6 +179,7 @@ def apply_and_generate_batch(
                     user_id=user.id,
                     admin_id=principal.id if principal.type == "admin" else None,
                     url=payload.url,
+                    source_site=payload.source_site,
                     company=payload.company,
                     role=payload.position,
                     stage="applied",
