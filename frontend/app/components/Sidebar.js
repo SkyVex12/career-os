@@ -75,9 +75,11 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   const nav = [
+    { href: "/", label: "Home", icon: "apps" },
     { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
     { href: "/applications", label: "Applications", icon: "apps" },
     { href: "/manage-users", label: "Manage users", icon: "users" },
+    { href: "/documents", label: "Documents", icon: "apps" },
   ];
 
   return (

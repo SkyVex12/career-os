@@ -4,7 +4,7 @@ import datetime as dt
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from sqlalchemy.orm import Session
 
@@ -113,7 +113,7 @@ from ..models import BaseResume
 
 
 class BaseResumeIn(BaseModel):
-    content_text: str
+    content_text: str = Field(..., min_length=20)
 
 
 @router.put("/users/{user_id}/base-resume")
@@ -137,10 +137,21 @@ def put_base_resume(
             raise HTTPException(status_code=403, detail="Forbidden")
 
     now = dt.datetime.utcnow()
-    row = BaseResume(user_id=user_id, content_text=payload.content_text, created_at=now)
-    db.add(row)
+    row = db.get(BaseResume, user_id)
+    if row:
+        row.content_text = payload.content_text
+        row.updated_at = now
+    else:
+        row = BaseResume(
+            user_id=user_id,
+            content_text=payload.content_text,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(row)
+
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "user_id": user_id, "updated_at": now.isoformat()}
 
 
 @router.get("/users/{user_id}/base-resume")
@@ -161,13 +172,64 @@ def get_base_resume(
         ):
             raise HTTPException(status_code=403, detail="Forbidden")
 
-    br = (
-        db.query(BaseResume)
-        .filter(BaseResume.user_id == user_id)
-        .order_by(BaseResume.created_at.desc())
-        .first()
-    )
-    return {"content_text": br.content_text if br else ""}
+    br = db.get(BaseResume, user_id)
+    return {
+        "user_id": user_id,
+        "content_text": br.content_text if br else "",
+        "updated_at": br.updated_at.isoformat() if br else None,
+    }
+
+
+class BaseResumeListItem(BaseModel):
+    user_id: str
+    title: str | None = None
+    content_text: str = ""
+    updated_at: str | None = None
+
+
+@router.get("/base-resumes")
+def list_base_resumes(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    """List base resumes visible to the current principal.
+
+    - Admin: all linked users (+ their base resume content, if any)
+    - User: only themselves
+    """
+    if principal.type == "admin":
+        rows = (
+            db.query(User, BaseResume)
+            .join(AdminUser, AdminUser.user_id == User.id)
+            .outerjoin(BaseResume, BaseResume.user_id == User.id)
+            .filter(AdminUser.admin_id == principal.id)
+            .order_by(User.created_at.desc())
+            .all()
+        )
+        items = []
+        for u, br in rows:
+            items.append(
+                {
+                    "user_id": u.id,
+                    "title": u.name or u.id,
+                    "content_text": br.content_text if br else "",
+                    "updated_at": br.updated_at.isoformat() if br else None,
+                }
+            )
+        return {"items": items}
+    else:
+        u = db.query(User).filter(User.id == principal.id).first()
+        br = db.get(BaseResume, principal.id)
+        return {
+            "items": [
+                {
+                    "user_id": principal.id,
+                    "title": (u.name if u else None) or principal.id,
+                    "content_text": br.content_text if br else "",
+                    "updated_at": br.updated_at.isoformat() if br else None,
+                }
+            ]
+        }
 
 
 class LinkUserIn(BaseModel):
