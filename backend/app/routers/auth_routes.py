@@ -74,6 +74,7 @@ def signup(payload: SignupIn, db: Session = Depends(get_db)):
                 password_hash=hash_password(payload.password),
                 principal_type="admin",
                 principal_id=admin_id,
+                principal_name=full_name,
                 created_at=now,
             )
         )
@@ -102,6 +103,7 @@ def signup(payload: SignupIn, db: Session = Depends(get_db)):
             password_hash=hash_password(payload.password),
             principal_type="user",
             principal_id=user_id,
+            principal_name=full_name,
             created_at=now,
         )
     )

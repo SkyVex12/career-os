@@ -39,7 +39,7 @@ export default function DashboardPage() {
   // can cause hydration mismatches. Read it after mount instead.
   const [userId, setUserId] = useState("u1");
 
-  const [days, setDays] = useState(60);
+  const [days, setDays] = useState(1);
   const [data, setData] = useState(null);
   const [status, setStatus] = useState("");
 
@@ -88,6 +88,10 @@ export default function DashboardPage() {
       .map((k) => ({ name: k, value: map[k] }))
       .sort((a, b) => b.value - a.value);
   }, [data]);
+
+  const series = data?.series || data?.series_daily || [];
+  const unit = data?.series_unit || "day"; // fallback for old API
+  const xKey = unit === "hour" ? "time" : "day";
 
   return (
     <main className="container">
@@ -179,18 +183,28 @@ export default function DashboardPage() {
           >
             <div>
               <div className="kpiTitle">Applications by date</div>
-              <div className="small">Counts per day (last {days} days)</div>
+              <div className="small">
+                Counts per {unit === "hour" ? "hour" : "day"} (last {days} day
+                {days > 1 ? "s" : ""})
+              </div>
             </div>
           </div>
 
           <div style={{ width: "100%", height: 320 }}>
             <ResponsiveContainer>
-              <LineChart data={data?.series_daily || []}>
+              <LineChart data={series}>
                 <CartesianGrid stroke="rgba(255,255,255,.10)" />
                 <XAxis
-                  dataKey="day"
+                  dataKey={xKey}
                   tick={{ fill: "rgba(255,255,255,.55)", fontSize: 11 }}
+                  tickFormatter={(v) => {
+                    if (unit !== "hour") return v;
+                    // v like "2025-12-29 13:00" -> "13:00"
+                    const parts = String(v).split(" ");
+                    return parts[1] || v;
+                  }}
                 />
+
                 <YAxis
                   tick={{ fill: "rgba(255,255,255,.55)", fontSize: 11 }}
                   allowDecimals={false}

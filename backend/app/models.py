@@ -90,8 +90,6 @@ class Application(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
-
-
 class JDKeyInfo(Base):
     __tablename__ = "jd_key_info"
     id = Column(Integer, primary_key=True)
@@ -105,8 +103,16 @@ class JDKeyInfo(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("user_id", "url_hash", "scope", "text_hash", name="uq_jdkey_user_url_scope_text"),
+        UniqueConstraint(
+            "user_id",
+            "url_hash",
+            "scope",
+            "text_hash",
+            name="uq_jdkey_user_url_scope_text",
+        ),
     )
+
+
 class JobDescription(Base):
     __tablename__ = "job_descriptions"
     id = Column(Integer, primary_key=True)

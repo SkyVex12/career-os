@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import datetime as dt
+import hashlib
 import json
 from typing import Any, Dict, List, Optional
 
@@ -11,7 +12,15 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..auth import Principal, get_db, get_principal
-from ..models import AdminUser, Application, BaseResume, StoredFile, User
+from ..models import (
+    AdminUser,
+    Application,
+    BaseResume,
+    StoredFile,
+    User,
+    JobDescription,
+    JDKeyInfo,
+)
 from ..storage import save_bytes
 from ..docx_render import render_resume
 
@@ -102,6 +111,22 @@ def apply_and_generate(
         )
         db.add(app_row)
 
+        jd_row = JobDescription(
+            user_id=payload.user_id,
+            application_id=app_row.id,
+            jd_text=payload.jd_text,
+        )
+        db.add(jd_row)
+
+        jd_key_info = JDKeyInfo(
+            user_id=payload.user_id,
+            source_url=payload.url,
+            url_hash=hashlib.sha256(payload.url.encode("utf-8")).hexdigest(),
+            text_hash=hashlib.sha256(payload.jd_text.encode("utf-8")).hexdigest(),
+            scope="canonical",
+            keys_json=json.dumps({}),  # placeholder for extracted keys
+        )
+        db.add(jd_key_info)
     # render docx
     ctx = _load_base_resume_context(db, payload.user_id)
     ctx = {
