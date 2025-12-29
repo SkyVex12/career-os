@@ -400,6 +400,7 @@ export default function ApplicationsPage() {
                 <tr key={a.id}>
                   <td>{a.company}</td>
                   <td>{a.role}</td>
+                  <td className="small">{a.source_site || "-"}</td>
                   <td>
                     <select
                       className="select"

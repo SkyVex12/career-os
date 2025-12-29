@@ -2,39 +2,65 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from .db import DB_PATH, engine, SessionLocal
-from .models import Base, Admin, User, AuthCredential, AuthToken
-
-# NOTE: This project uses simple SQLAlchemy create_all for SQLite schema management.
-# If you delete the DB file, re-run `python -m app.init_db` or start uvicorn (it calls ensure_sqlite_schema).
+from .migrations import migrate_sqlite
+from .models import Base, Admin, User, AuthCredential
+from .security import hash_password
 
 
 def ensure_sqlite_schema() -> None:
-    # Create tables
+    """Ensure SQLite schema exists and is up to date."""
     Base.metadata.create_all(bind=engine)
+    migrate_sqlite(engine)
 
-    # Seed a dev admin + token for local development (safe to run repeatedly)
     db: Session = SessionLocal()
     try:
         now = dt.datetime.utcnow()
 
-        admin = db.query(Admin).filter(Admin.id == "a1").first()
-        if not admin:
-            admin = Admin(id="a1", name="Dev Admin")
-            db.add(admin)
-
-        # Add a dev token that the extension can use by default
-        tok = db.query(AuthToken).filter(AuthToken.token == "dev-admin").first()
-        if not tok:
+        if db.query(Admin).first() is None:
+            admin_id = "a1"
             db.add(
-                AuthToken(
-                    token="dev-admin",
+                Admin(
+                    id=admin_id,
+                    name="dev",
+                    first_name="Dev",
+                    last_name="Admin",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            db.add(
+                AuthCredential(
+                    email="admin@example.com",
+                    password_hash=hash_password("admin"),
                     principal_type="admin",
-                    principal_id="a1",
                     principal_name="dev",
+                    principal_id=admin_id,
+                    created_at=now,
+                )
+            )
+
+        if db.query(User).first() is None:
+            user_id = "u1"
+            db.add(
+                User(
+                    id=user_id,
+                    name="User",
+                    first_name="Demo",
+                    last_name="User",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            db.add(
+                AuthCredential(
+                    email="user@example.com",
+                    password_hash=hash_password("user"),
+                    principal_type="user",
+                    principal_name="User",
+                    principal_id=user_id,
                     created_at=now,
                 )
             )
