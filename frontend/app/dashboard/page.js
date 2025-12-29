@@ -16,6 +16,7 @@ import {
   Cell,
   Legend,
 } from "recharts";
+import { useScope } from "../components/ClientShell";
 
 const COLORS = [
   "#60a5fa",
@@ -38,6 +39,14 @@ export default function DashboardPage() {
   // NOTE: don't read localStorage during the initial render ...
   // can cause hydration mismatches. Read it after mount instead.
   const [userId, setUserId] = useState("u1");
+  const { scope, principal } = useScope();
+
+  const effectivelyUserId =
+    principal?.type === "user"
+      ? principal.user_id
+      : scope?.mode === "user"
+      ? scope.userId
+      : null;
 
   const [days, setDays] = useState(1);
   const [data, setData] = useState(null);
@@ -66,7 +75,7 @@ export default function DashboardPage() {
     try {
       setStatus("Loading...");
       const params = new URLSearchParams({
-        user_id: userId,
+        ...(effectivelyUserId ? { user_id: effectivelyUserId } : {}),
         days: String(days),
       });
       const d = await apiFetch(`/v1/applications/stats?${params.toString()}`);
@@ -79,7 +88,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     load(); /* eslint-disable-next-line */
-  }, [days, userId]);
+  }, [days, effectivelyUserId]);
 
   const stagePie = useMemo(() => {
     if (!data?.stage_counts) return [];
@@ -109,7 +118,7 @@ export default function DashboardPage() {
             flexWrap: "wrap",
           }}
         >
-          <span className="chip">user: {userId}</span>
+          <span className="chip">user: {effectivelyUserId}</span>
           <span className="chip">window: last {days} days</span>
           <select
             className="select"

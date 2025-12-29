@@ -16,6 +16,22 @@ export default function Topbar({
   const [err, setErr] = useState("");
   const [mounted, setMounted] = useState(false);
 
+  const changeScope = (e) => {
+    const v = e.target.value;
+    setScope(
+      v === "all" ? { mode: "all", userId: null } : { mode: "user", userId: v }
+    );
+
+    try {
+      if (v === "all") {
+        localStorage.removeItem("careeros_user_id");
+      } else {
+        localStorage.setItem("careeros_user_id", v);
+      }
+      window.dispatchEvent(new Event("careeros:user-changed"));
+    } catch {}
+  };
+
   useEffect(() => {
     setMounted(true);
     (async () => {
@@ -103,14 +119,7 @@ export default function Topbar({
                 </span>
                 <select
                   value={scope.mode === "all" ? "all" : scope.userId || "all"}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setScope(
-                      v === "all"
-                        ? { mode: "all", userId: null }
-                        : { mode: "user", userId: v }
-                    );
-                  }}
+                  onChange={(e) => changeScope(e)}
                   aria-label="Scope selector"
                 >
                   <option value="all">All my users</option>

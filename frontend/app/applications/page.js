@@ -141,7 +141,6 @@ export default function ApplicationsPage() {
       setStatus("Loading board…");
       // run sequentially to keep backend calmer (and simpler)
       for (const s of STAGES) {
-        console.log("Loading stage", s);
         // eslint-disable-next-line no-await-in-loop
         await loadKanbanStage(s);
         if (my !== reqSeq.current) return;
