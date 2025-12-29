@@ -30,10 +30,15 @@ def migrate_sqlite(engine: Engine) -> None:
                 text("UPDATE job_descriptions SET user_id = COALESCE(user_id, 'u1');")
             )
 
-    # stored_files.user_id
-    if not _has_column(engine, "stored_files", "user_id"):
+    # applications.source_site (human-entered source site name: indeed, linkedin, etc.)
+    if not _has_column(engine, "applications", "source_site"):
         with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE stored_files ADD COLUMN user_id TEXT;"))
-            conn.execute(
-                text("UPDATE stored_files SET user_id = COALESCE(user_id, 'u1');")
-            )
+            conn.execute(text("ALTER TABLE applications ADD COLUMN source_site TEXT;"))
+
+        # stored_files.user_id
+        if not _has_column(engine, "stored_files", "user_id"):
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE stored_files ADD COLUMN user_id TEXT;"))
+                conn.execute(
+                    text("UPDATE stored_files SET user_id = COALESCE(user_id, 'u1');")
+                )

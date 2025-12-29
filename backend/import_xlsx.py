@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from openpyxl import load_workbook
+import time
 
 from app.db import SessionLocal
 from app.models import Application, User
@@ -168,9 +169,10 @@ def main():
                     else:
                         skipped += 1
                     continue
-
+                app_id = f"app{dt.strftime('%Y%m%d%H%M%S')}{dt.microsecond}"
                 db.add(
                     Application(
+                        id=app_id,
                         user_id=USER_ID,
                         company=company,
                         role=title,
@@ -180,7 +182,6 @@ def main():
                     )
                 )
                 inserted += 1
-
             except Exception as e:
                 bad += 1
                 print(f"[WARN] row skipped due to error: {e}")
