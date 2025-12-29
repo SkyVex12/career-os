@@ -23,7 +23,7 @@ from ..models import (
 )
 from ..storage import save_bytes
 from ..docx_render import render_resume
-
+from ..ai import build_prompt_compress_jd, call_openai_json
 
 router = APIRouter(prefix="/v1", tags=["ingest"])
 
@@ -118,13 +118,16 @@ def apply_and_generate(
         )
         db.add(jd_row)
 
+        compress_prompt = build_prompt_compress_jd(jd_row)
+        ats_package = call_openai_json(compress_prompt)
+        print(ats_package)
         jd_key_info = JDKeyInfo(
             user_id=payload.user_id,
             source_url=payload.url,
             url_hash=hashlib.sha256(payload.url.encode("utf-8")).hexdigest(),
             text_hash=hashlib.sha256(payload.jd_text.encode("utf-8")).hexdigest(),
             scope="canonical",
-            keys_json=json.dumps({}),  # placeholder for extracted keys
+            keys_json=ats_package,  # placeholder for extracted keys
         )
         db.add(jd_key_info)
     # render docx

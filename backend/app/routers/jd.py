@@ -19,7 +19,9 @@ router = APIRouter(prefix="/v1", tags=["jd"])
 class JDKeysIn(BaseModel):
     user_id: str = Field(..., description="Owner of the application/resume context.")
     source_url: Optional[str] = Field(None, description="Job posting URL (optional).")
-    jd_text: str = Field(..., min_length=1, description="Job description text (full or partial).")
+    jd_text: str = Field(
+        ..., min_length=1, description="Job description text (full or partial)."
+    )
     scope: str = Field("fragment", pattern="^(canonical|fragment)$")
 
 
@@ -65,7 +67,57 @@ def _sha256(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 
-_TECH = ["python", "javascript", "typescript", "react", "next.js", "node", "fastapi", "django", "flask", "aws", "gcp", "azure", "kubernetes", "docker", "terraform", "postgres", "mysql", "mongodb", "redis", "graphql", "rest", "microservices", "ci/cd", "github actions", "gitlab", "spark", "airflow", "etl", "machine learning", "nlp", "llm", "openai", "pandas", "numpy", "pytorch", "tensorflow", "java", "go", "golang", "c#", "php", "laravel", "spring", "dotnet", "kafka", "rabbitmq", "snowflake", "databricks", "bigquery"]
+_TECH = [
+    "python",
+    "javascript",
+    "typescript",
+    "react",
+    "next.js",
+    "node",
+    "fastapi",
+    "django",
+    "flask",
+    "aws",
+    "gcp",
+    "azure",
+    "kubernetes",
+    "docker",
+    "terraform",
+    "postgres",
+    "mysql",
+    "mongodb",
+    "redis",
+    "graphql",
+    "rest",
+    "microservices",
+    "ci/cd",
+    "github actions",
+    "gitlab",
+    "spark",
+    "airflow",
+    "etl",
+    "machine learning",
+    "nlp",
+    "llm",
+    "openai",
+    "pandas",
+    "numpy",
+    "pytorch",
+    "tensorflow",
+    "java",
+    "go",
+    "golang",
+    "c#",
+    "php",
+    "laravel",
+    "spring",
+    "dotnet",
+    "kafka",
+    "rabbitmq",
+    "snowflake",
+    "databricks",
+    "bigquery",
+]
 
 
 def _extract_keys(jd_text: str) -> Dict[str, Any]:
@@ -99,8 +151,14 @@ def _extract_keys(jd_text: str) -> Dict[str, Any]:
 
     must = []
     nice = []
-    must_section = re.search(r"(requirements|qualifications|what you bring|must have)([\s\S]{0,2500})", raw, re.I)
-    pref_section = re.search(r"(preferred|nice to have|bonus)([\s\S]{0,2500})", raw, re.I)
+    must_section = re.search(
+        r"(requirements|qualifications|what you bring|must have)([\s\S]{0,2500})",
+        raw,
+        re.I,
+    )
+    pref_section = re.search(
+        r"(preferred|nice to have|bonus)([\s\S]{0,2500})", raw, re.I
+    )
     if must_section:
         sec = must_section.group(2).lower()
         for k in tech_stack:
