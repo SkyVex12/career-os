@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import re
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Set
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 from ..auth import Principal, get_principal
 from ..db import SessionLocal
 from ..models import AdminUser, BaseResume, JDKeyInfo, StoredFile
-from ..resume_docx import replace_bullets_in_docx
-from ..ai import tailor_rewrite_experience
+from ..resume_docx import replace_bullets_in_docx, replace_summary_in_docx
+from ..ai import tailor_rewrite_resume
 
 router = APIRouter()
 
@@ -54,7 +54,6 @@ def _dedupe_keep_order(items: List[str]) -> List[str]:
 
 
 def _phrase_hit(bullet: str, phrase: str) -> bool:
-    """Token-intersection match (same approach as your earlier scorer)."""
     btoks = set(_tokenize(bullet))
     ptoks = set(_tokenize(phrase))
     return bool(btoks and ptoks and (btoks & ptoks))
@@ -104,15 +103,13 @@ def _check_access(db: Session, principal: Principal, user_id: str) -> None:
 
 
 def _load_base_resume_json(br: BaseResume) -> Dict[str, Any]:
-    """
-    content_text is expected to be JSON; fallback: treat as plain text and extract bullet blocks.
-    """
     txt = br.content_text or ""
     try:
         obj = json.loads(txt)
         if isinstance(obj, dict) and ("experiences" in obj):
             return obj
-    except Exception:
+    except Exception as e:
+        print("---------------", e)
         pass
 
     bullets: List[str] = []
@@ -123,6 +120,8 @@ def _load_base_resume_json(br: BaseResume) -> Dict[str, Any]:
 
     return {
         "schema": "resume_json_fallback_v1",
+        "summary": "",
+        "summary_para_idxs": [],
         "experiences": [{"header": "", "bullets": bullets, "bullet_para_idxs": []}],
     }
 
@@ -135,7 +134,7 @@ def _load_base_resume_json(br: BaseResume) -> Dict[str, Any]:
 class TailorBulletsIn(BaseModel):
     user_id: str
     jd_key_id: int
-    bullets_per_role: int = Field(default=5, ge=1, le=10)  # kept for compatibility
+    bullets_per_role: int = Field(default=5, ge=1, le=10)  # kept for compat
     max_roles: int = Field(default=4, ge=1, le=10)
 
 
@@ -143,10 +142,11 @@ class TailorBulletsOut(BaseModel):
     selected_experiences: List[Dict[str, Any]]
     keywords_covered: List[str]
     gaps: List[str]
+    summary: str = ""
 
 
 # ---------------------------
-# Endpoint: tailor bullets (AI rewrite; hits+gaps computed server-side)
+# Endpoint: tailor bullets + summary (ONE OPENAI CALL)
 # ---------------------------
 
 
@@ -173,6 +173,7 @@ def tailor_bullets(
             status_code=400, detail="Base resume JSON has no experiences"
         )
 
+    # JD keys
     try:
         jd_keys = json.loads(jd.keys_json or "{}")
         if not isinstance(jd_keys, dict):
@@ -184,69 +185,90 @@ def tailor_bullets(
     core_soft = _dedupe_keep_order(jd_keys.get("core_soft") or [])
     required_phrases = _dedupe_keep_order(jd_keys.get("required_phrases") or [])
 
-    # Token pools for verification
-    all_resume_bullets: List[str] = []
-    for exp in exps:
-        for b in exp.get("bullets") or []:
-            all_resume_bullets.append(str(b))
+    # Build inputs for ONE call
+    summary_original = (resume.get("summary") or "").strip()
 
-    covered_all: Set[str] = set()
-    selected: List[Dict[str, Any]] = []
-
+    exp_bullets_list: List[List[str]] = []
+    exp_meta_list: List[Dict[str, Any]] = []
     for exp in exps[: payload.max_roles]:
         bullets = [str(b).strip() for b in (exp.get("bullets") or []) if str(b).strip()]
         if not bullets:
             continue
+        exp_bullets_list.append(bullets)
+        # keep meta to return
+        exp_meta_list.append(
+            {
+                "header": exp.get("header"),
+                "company": exp.get("company"),
+                "title": exp.get("title"),
+                "start": exp.get("start"),
+                "end": exp.get("end"),
+                "location": exp.get("location"),
+            }
+        )
 
-        # AI rewrite
-        try:
-            ai = tailor_rewrite_experience(
-                exp_bullets=bullets,
-                core_hard=core_hard,
-                core_soft=core_soft,
-                required_phrases=required_phrases,
-            )
-        except Exception as e:
-            print("AI error:", e)
-            rewritten_bullets = bullets[:]  # same count
-            hits_per_bullet: List[Dict[str, Any]] = []
-            for b in rewritten_bullets:
+    # ONE OpenAI call
+    try:
+        ai = tailor_rewrite_resume(
+            summary_text=summary_original,
+            experiences=exp_bullets_list,
+            core_hard=core_hard,
+            core_soft=core_soft,
+            required_phrases=required_phrases,
+        )
+    except Exception as e:
+        print("AI error:", e)
+        # Fail closed: no AI changes
+        covered_all: Set[str] = set()
+        selected: List[Dict[str, Any]] = []
+        for k, bullets in enumerate(exp_bullets_list):
+            rewritten = bullets
+            hits_per_bullet = []
+            for b in rewritten:
                 hits = _compute_hits_for_bullet(
                     b, core_hard, core_soft, required_phrases
                 )
                 hits_per_bullet.append({"bullet": b, "hits": hits})
                 for h in hits:
                     covered_all.add(_norm(h))
-
             selected.append(
-                {"bullets": rewritten_bullets, "hits_per_bullet": hits_per_bullet}
+                {
+                    **exp_meta_list[k],
+                    "bullets": rewritten,
+                    "hits_per_bullet": hits_per_bullet,
+                }
             )
-            continue
 
-        items = ai.get("rewrites") or []
+        gaps = [req for req in core_hard if _norm(req) not in covered_all]
+        return TailorBulletsOut(
+            selected_experiences=selected,
+            keywords_covered=sorted(list(covered_all)),
+            gaps=gaps,
+            summary=summary_original,
+        )
+    # Apply summary (clamp)
+    tailored_summary = ai.get("summary") or summary_original
 
-        # Ensure same length + correct ordering (fail closed)
-        items_by_idx = {int(it.get("source_index", -1)): it for it in items}
-        ordered_items: List[Dict[str, Any]] = []
-        for i, orig_b in enumerate(bullets):
-            it = items_by_idx.get(i)
-            if not it:
-                ordered_items.append(
-                    {"source_index": i, "original": orig_b, "rewritten": orig_b}
-                )
-            else:
-                ordered_items.append(
-                    {
-                        "source_index": i,
-                        "original": str(it.get("original") or orig_b).strip() or orig_b,
-                        "rewritten": str(it.get("rewritten") or orig_b).strip()
-                        or orig_b,
-                    }
-                )
+    # Apply bullet rewrites deterministically (same count, same order per exp)
+    exp_rewrites = {
+        int(x.get("exp_index")): (x.get("rewrites") or [])
+        for x in (ai.get("experiences") or [])
+    }
 
-        rewritten_bullets = [i["rewritten"] for i in ordered_items]
-        # Compute hits OUTSIDE AI (using final rewritten bullets)
-        hits_per_bullet: List[Dict[str, Any]] = []
+    covered_all: Set[str] = set()
+    selected: List[Dict[str, Any]] = []
+
+    for exp_idx, orig_bullets in enumerate(exp_bullets_list):
+        rewrites = exp_rewrites.get(exp_idx, [])
+        by_source = {int(r.get("source_index", -1)): r for r in rewrites}
+
+        rewritten_bullets: List[str] = []
+        for j, orig in enumerate(orig_bullets):
+            rw = str((by_source.get(j) or {}).get("rewritten") or orig).strip() or orig
+            rewritten_bullets.append(rw)
+
+        # Compute hits OUTSIDE AI (your requirement)
+        hits_per_bullet = []
         for b in rewritten_bullets:
             hits = _compute_hits_for_bullet(b, core_hard, core_soft, required_phrases)
             hits_per_bullet.append({"bullet": b, "hits": hits})
@@ -254,31 +276,32 @@ def tailor_bullets(
                 covered_all.add(_norm(h))
 
         selected.append(
-            {"bullets": rewritten_bullets, "hits_per_bullet": hits_per_bullet}
+            {
+                **exp_meta_list[exp_idx],
+                "bullets": rewritten_bullets,
+                "hits_per_bullet": hits_per_bullet,
+            }
         )
 
-    # Gaps computed OUTSIDE AI (based on final coverage)
-    gaps: List[str] = []
-    for req in core_hard:
-        if _norm(req) not in covered_all:
-            gaps.append(req)
+    gaps = [req for req in core_hard if _norm(req) not in covered_all]
 
     return TailorBulletsOut(
         selected_experiences=selected,
         keywords_covered=sorted(list(covered_all)),
         gaps=gaps,
+        summary=tailored_summary,
     )
 
 
 # ---------------------------
-# Endpoint: export tailored docx
+# Export tailored docx (summary + bullets)
 # ---------------------------
 
 
 class ExportTailoredDocxIn(BaseModel):
     user_id: str
     jd_key_id: int
-    bullets_per_role: int = Field(default=5, ge=1, le=10)  # kept for compatibility
+    bullets_per_role: int = Field(default=5, ge=1, le=10)
     max_roles: int = Field(default=4, ge=1, le=10)
 
 
@@ -288,14 +311,12 @@ def export_tailored_docx(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ):
-    """Export a DOCX using the ORIGINAL uploaded resume as the template."""
     _check_access(db, principal, payload.user_id)
 
     br = db.query(BaseResume).filter(BaseResume.user_id == payload.user_id).first()
     if not br:
         raise HTTPException(status_code=404, detail="Base resume not found")
     resume = _load_base_resume_json(br)
-
     sf = (
         db.query(StoredFile)
         .filter(
@@ -329,10 +350,18 @@ def export_tailored_docx(
         db=db,
         principal=principal,
     )
+
+    # Replace summary first (if indices exist in stored resume JSON)
+    summary_idxs = resume.get("summary_para_idxs") or []
+    if summary_idxs and (tailored.summary or "").strip():
+        docx_bytes = replace_summary_in_docx(docx_bytes, summary_idxs, tailored.summary)
+
+    # Replace bullets
     bullet_blocks = resume.get("experiences") or []
     new_by_block: Dict[int, List[str]] = {}
     for i, exp in enumerate(tailored.selected_experiences):
         new_by_block[i] = exp.get("bullets") or []
+
     out_bytes = replace_bullets_in_docx(docx_bytes, bullet_blocks, new_by_block)
     b64 = base64.b64encode(out_bytes).decode("utf-8")
 
@@ -340,6 +369,7 @@ def export_tailored_docx(
         "ok": True,
         "resume_docx_base64": b64,
         "template_source": sf.filename,
+        "summary": tailored.summary,
         "selected_experiences": tailored.selected_experiences,
         "gaps": tailored.gaps,
     }
