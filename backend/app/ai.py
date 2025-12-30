@@ -1,6 +1,7 @@
 import os, json, re, time
 from dotenv import load_dotenv
 from openai import OpenAI, OpenAIError
+from typing import Dict, List, Any
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -88,7 +89,6 @@ Return ONLY valid JSON.
 
 TASK:
 Compress this Job Description into an ATS_PACKAGE JSON object with:
-- job_title_exact (the exact job title phrase in the JD if present; else "Senior Software Engineer")
 - core_hard: list of hard skills/tech/phrases that must be present (20-35 max), something like 
 - core_soft: list of soft skills phrases verbatim from JD (10-20 max)
 - required_phrases: important long phrases (5-15 max)
@@ -101,3 +101,88 @@ RULES:
 JOB DESCRIPTION:
 {jd_text}
 """.strip()
+
+
+# ---------------------------
+# OpenAI tailoring (rewrite)
+# ---------------------------
+
+# Structured Outputs JSON schema. :contentReference[oaicite:2]{index=2}
+_TAILOR_JSON_SCHEMA = {
+    "name": "resume_tailor_1to1_v1",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "rewrites": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "source_index": {"type": "integer", "minimum": 0},
+                        "rewritten": {"type": "string"},
+                    },
+                    "required": ["source_index", "rewritten"],
+                },
+            },
+        },
+        "required": ["rewrites"],
+    },
+}
+
+
+def tailor_rewrite_experience(
+    *,
+    exp_bullets: List[str],
+    core_hard: List[str],
+    core_soft: List[str],
+    required_phrases: List[str],
+) -> Dict[str, Any]:
+    """
+    Rewrites and selects bullets using OpenAI Responses API + Structured Outputs.
+
+    Important safety rule:
+    - Do NOT add new facts: no new tools/skills/metrics unless they exist somewhere in the provided bullets.
+    We still enforce a server-side verifier afterward.
+    """
+    # Compact payload the model can follow deterministically
+    model_input = {
+        "task": "Rewrite each resume bullet to better match the JD keys while staying strictly truthful.",
+        "constraints": [
+            "Rewrite EVERY bullet. Do not drop bullets and do not add bullets.",
+            "Return exactly the same number of bullets as candidate_bullets.",
+            "Keep the same order as candidate_bullets (source_index must match).",
+            "Do NOT add new tools, metrics, scope, outcomes, employers, timelines, or responsibilities not present in the originals.",
+            "Make bullets ATS-friendly: strong verb first, include relevant JD keywords",
+            "Keep bullets concise (ideally <= 160 chars) and past tense.",
+        ],
+        "jd": {
+            "core_hard_skills": core_hard,
+            "core_soft_skills": core_soft,
+            "required_phrases": required_phrases,
+        },
+        "candidate_bullets": [{"i": i, "text": b} for i, b in enumerate(exp_bullets)],
+    }
+
+    # Responses API + Structured Outputs (text.format). :contentReference[oaicite:3]{index=3}
+    resp = client.responses.create(
+        model="gpt-4.1-mini",
+        input=[
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": json.dumps(model_input)}],
+            }
+        ],
+        temperature=0.2,
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": _TAILOR_JSON_SCHEMA["name"],  # ✅ REQUIRED
+                "schema": _TAILOR_JSON_SCHEMA["schema"],  # ✅ REQUIRED
+            }
+        },
+    )
+    # The SDK provides output_text helper. :contentReference[oaicite:4]{index=4}
+    return json.loads(resp.output_text)

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import datetime as dt
-import hashlib
 import json
 from typing import Any, Dict, List, Optional
 
@@ -19,22 +18,12 @@ from ..models import (
     StoredFile,
     User,
     JobDescription,
-    JDKeyInfo,
 )
 from ..storage import save_bytes
-from ..docx_render import render_resume
-from ..ai import build_prompt_compress_jd, call_openai_json
+from .jd import get_or_create_jd_keys
+from .resume_builder import export_tailored_docx, ExportTailoredDocxIn
 
 router = APIRouter(prefix="/v1", tags=["ingest"])
-
-
-def _admin_users(db: Session, admin_id: str) -> List[User]:
-    user_ids = [
-        r.user_id
-        for r in db.query(AdminUser).filter(AdminUser.admin_id == admin_id).all()
-    ]
-
-    return db.query(User).filter(User.id.in_(user_ids)).all()
 
 
 def _ensure_access(db: Session, principal: Principal, user_id: str) -> None:
@@ -50,22 +39,6 @@ def _ensure_access(db: Session, principal: Principal, user_id: str) -> None:
     )
     if not ok:
         raise HTTPException(status_code=403, detail="Forbidden")
-
-
-def _load_base_resume_context(db: Session, user_id: str) -> Dict[str, Any]:
-    br = (
-        db.query(BaseResume)
-        .filter(BaseResume.user_id == user_id)
-        .order_by(BaseResume.created_at.desc())
-        .first()
-    )
-    if not br or not br.content_text:
-        return {}
-    txt = br.content_text.strip()
-    try:
-        return json.loads(txt)
-    except Exception:
-        return {"base_resume_text": txt}
 
 
 class ApplyAndGenerateIn(BaseModel):
@@ -118,30 +91,14 @@ def apply_and_generate(
         )
         db.add(jd_row)
 
-        compress_prompt = build_prompt_compress_jd(jd_row)
-        ats_package = call_openai_json(compress_prompt)
-        print(ats_package)
-        jd_key_info = JDKeyInfo(
-            user_id=payload.user_id,
-            source_url=payload.url,
-            url_hash=hashlib.sha256(payload.url.encode("utf-8")).hexdigest(),
-            text_hash=hashlib.sha256(payload.jd_text.encode("utf-8")).hexdigest(),
-            scope="canonical",
-            keys_json=ats_package,  # placeholder for extracted keys
-        )
-        db.add(jd_key_info)
-    # render docx
-    ctx = _load_base_resume_context(db, payload.user_id)
-    ctx = {
-        **ctx,
-        "target_company": payload.company,
-        "target_role": payload.position,
-        "job_url": payload.url,
-        "job_description": payload.jd_text,
-    }
+    keys = get_or_create_jd_keys(payload, db, principal)
+    data = export_tailored_docx(
+        ExportTailoredDocxIn(user_id=payload.user_id, jd_key_id=keys["id"]),
+        db,
+        principal,
+    )
 
-    docx_bytes = render_resume(ctx)
-
+    docx_bytes = base64.b64decode(data["resume_docx_base64"])
     file_id = f"file{now.strftime('%Y%m%d%H%M%S')}{now.microsecond}"
     user = db.get(User, payload.user_id)
     rel_path = save_bytes(
@@ -167,95 +124,3 @@ def apply_and_generate(
         "resume_download_url": f"/v1/files/{file_id}/download",
         "resume_docx_base64": base64.b64encode(docx_bytes).decode("utf-8"),
     }
-
-
-class ApplyAndGenerateBatchIn(BaseModel):
-    url: str
-    source_site: Optional[str] = None
-    company: str
-    position: str
-    jd_text: str
-
-
-@router.post("/ingest/apply-and-generate/batch")
-def apply_and_generate_batch(
-    payload: ApplyAndGenerateBatchIn,
-    db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
-):
-    if principal.type != "admin":
-        raise HTTPException(status_code=403, detail="Admin required")
-
-    users = _admin_users(db, principal.id)
-    now = dt.datetime.utcnow()
-    results = []
-    for user in users:
-        try:
-            # create per-user
-            existing = (
-                db.query(Application)
-                .filter(Application.user_id == user.id, Application.url == payload.url)
-                .order_by(Application.created_at.desc())
-                .first()
-            )
-            if existing:
-                app_row = existing
-            else:
-                app_id = f"app{dt.datetime.utcnow().strftime('%Y%m%d%H%M%S')}{dt.datetime.utcnow().microsecond}"
-                app_row = Application(
-                    id=app_id,
-                    user_id=user.id,
-                    admin_id=principal.id if principal.type == "admin" else None,
-                    url=payload.url,
-                    source_site=payload.source_site,
-                    company=payload.company,
-                    role=payload.position,
-                    stage="applied",
-                    created_at=dt.datetime.utcnow(),
-                    updated_at=dt.datetime.utcnow(),
-                )
-                db.add(app_row)
-
-            ctx = _load_base_resume_context(db, user.id)
-            ctx = {
-                **ctx,
-                "target_company": payload.company,
-                "target_role": payload.position,
-                "job_url": payload.url,
-                "job_description": payload.jd_text,
-            }
-            docx_bytes = render_resume(ctx)
-
-            file_id = f"file{dt.datetime.utcnow().strftime('%Y%m%d%H%M%S')}{dt.datetime.utcnow().microsecond}"
-            rel_path = save_bytes(
-                f"{user.name}-{user.id}", app_row.id, file_id + ".docx", docx_bytes
-            )
-            stored = StoredFile(
-                id=file_id,
-                user_id=user.id,
-                application_id=app_row.id,
-                kind="resume_docx",
-                path=rel_path,
-                filename="resume.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                created_at=dt.datetime.utcnow(),
-            )
-            db.add(stored)
-            app_row.resume_docx_file_id = file_id
-            db.flush()
-
-            results.append(
-                {
-                    "ok": True,
-                    "user_id": user.id,
-                    "application_id": app_row.id,
-                    "resume_docx_file_id": file_id,
-                    "resume_download_url": f"/v1/files/{file_id}/download",
-                    "resume_docx_base64": base64.b64encode(docx_bytes).decode("utf-8"),
-                }
-            )
-        except Exception as e:
-            results.append({"ok": False, "user_id": user.id, "error": str(e)})
-
-    db.commit()
-    return {"results": results}
