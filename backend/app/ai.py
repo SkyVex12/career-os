@@ -108,67 +108,87 @@ JOB DESCRIPTION:
 # ---------------------------
 
 # Structured Outputs JSON schema. :contentReference[oaicite:2]{index=2}
-_TAILOR_JSON_SCHEMA = {
-    "name": "resume_tailor_1to1_v1",
+_TAILOR_RESUME_SCHEMA = {
+    "name": "resume_tailor_summary_and_bullets_v1",
     "strict": True,
     "schema": {
         "type": "object",
         "additionalProperties": False,
         "properties": {
-            "rewrites": {
+            "summary": {"type": "string"},
+            "experiences": {
                 "type": "array",
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
                     "properties": {
-                        "source_index": {"type": "integer", "minimum": 0},
-                        "rewritten": {"type": "string"},
+                        "exp_index": {"type": "integer", "minimum": 0},
+                        "rewrites": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "source_index": {"type": "integer", "minimum": 0},
+                                    "rewritten": {"type": "string"},
+                                },
+                                "required": ["source_index", "rewritten"],
+                            },
+                        },
                     },
-                    "required": ["source_index", "rewritten"],
+                    "required": ["exp_index", "rewrites"],
                 },
             },
         },
-        "required": ["rewrites"],
+        "required": ["summary", "experiences"],
     },
 }
 
 
-def tailor_rewrite_experience(
+def tailor_rewrite_resume(
     *,
-    exp_bullets: List[str],
+    summary_text: str,
+    experiences: List[List[str]],  # list of exp bullets; each exp is list[str]
     core_hard: List[str],
     core_soft: List[str],
     required_phrases: List[str],
+    model: str = "gpt-4.1-mini",
 ) -> Dict[str, Any]:
     """
-    Rewrites and selects bullets using OpenAI Responses API + Structured Outputs.
-
-    Important safety rule:
-    - Do NOT add new facts: no new tools/skills/metrics unless they exist somewhere in the provided bullets.
-    We still enforce a server-side verifier afterward.
+    Single OpenAI call:
+    - rewrite summary
+    - rewrite EVERY bullet (same count, same order) for each experience
     """
-    # Compact payload the model can follow deterministically
+
     model_input = {
-        "task": "Rewrite each resume bullet to better match the JD keys while staying strictly truthful.",
+        "task": "Rewrite the resume summary and each bullet to better match JD keys while staying strictly truthful.",
         "constraints": [
-            "Rewrite EVERY bullet. Do not drop bullets and do not add bullets.",
-            "Return exactly the same number of bullets as candidate_bullets.",
-            "Keep the same order as candidate_bullets (source_index must match).",
-            "Do NOT add new tools, metrics, scope, outcomes, employers, timelines, or responsibilities not present in the originals.",
-            "Make bullets ATS-friendly: strong verb first, include relevant JD keywords",
-            "Keep bullets concise (ideally <= 160 chars) and past tense.",
+            "Do NOT add new tools, employers, years, certifications, metrics, scope, outcomes, or responsibilities not present in the original text.",
+            "Summary: 3-4 sentences. Target <= 350 chars; hard cap <= 420 chars.",
+            "Bullets: rewrite EVERY bullet. Do not drop bullets and do not add bullets.",
+            "Bullets must keep same count and same order as provided. source_index must match.",
+            "Bullets: target <= 150 chars, hard cap <= 170 chars (10pt, max ~3 lines). Past tense. Strong verb first.",
+            "Use JD keywords only when supported by the original bullet/summary content.",
         ],
         "jd": {
             "core_hard_skills": core_hard,
             "core_soft_skills": core_soft,
             "required_phrases": required_phrases,
         },
-        "candidate_bullets": [{"i": i, "text": b} for i, b in enumerate(exp_bullets)],
+        "summary_original": summary_text or "",
+        "experiences": [
+            {
+                "exp_index": i,
+                "bullets": [
+                    {"source_index": j, "text": b} for j, b in enumerate(bullets)
+                ],
+            }
+            for i, bullets in enumerate(experiences)
+        ],
     }
 
-    # Responses API + Structured Outputs (text.format). :contentReference[oaicite:3]{index=3}
     resp = client.responses.create(
-        model="gpt-4.1-mini",
+        model=model,
         input=[
             {
                 "role": "user",
@@ -179,10 +199,10 @@ def tailor_rewrite_experience(
         text={
             "format": {
                 "type": "json_schema",
-                "name": _TAILOR_JSON_SCHEMA["name"],  # ✅ REQUIRED
-                "schema": _TAILOR_JSON_SCHEMA["schema"],  # ✅ REQUIRED
+                "name": _TAILOR_RESUME_SCHEMA["name"],
+                "schema": _TAILOR_RESUME_SCHEMA["schema"],
             }
         },
     )
-    # The SDK provides output_text helper. :contentReference[oaicite:4]{index=4}
+
     return json.loads(resp.output_text)
