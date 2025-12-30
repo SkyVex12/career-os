@@ -5,3 +5,5 @@ openai
 python-dotenv
 docxtpl
 jinja2
+python-docx
+python-multipart

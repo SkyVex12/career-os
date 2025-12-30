@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -111,10 +112,99 @@ def admin_create_user_and_link(
 
 
 from ..models import BaseResume
+from ..models import StoredFile
+from ..storage import save_bytes, safe_filename
+from ..resume_docx import extract_resume_json_from_docx
+
+from fastapi import UploadFile, File
 
 
 class BaseResumeIn(BaseModel):
     content_text: str = Field(..., min_length=20)
+
+
+@router.put("/users/{user_id}/base-resume-docx")
+async def put_base_resume_docx(
+    user_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    """Upload a base resume DOCX.
+
+    - Extract bullet blocks and store JSON into base_resumes.content_text.
+    - Save the original DOCX as a StoredFile(kind='base_resume_docx') so we can export later
+      while keeping the original template/format.
+    """
+
+    # access: user self or admin linked
+    if principal.type == "user":
+        if principal.id != user_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
+    else:
+        if (
+            db.query(AdminUser)
+            .filter(AdminUser.admin_id == principal.id, AdminUser.user_id == user_id)
+            .first()
+            is None
+        ):
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+    if not file.filename.lower().endswith(".docx"):
+        raise HTTPException(status_code=400, detail="Only .docx files are supported")
+
+    data = await file.read()
+    if not data or len(data) < 1000:
+        raise HTTPException(status_code=400, detail="Invalid DOCX")
+
+    # Extract JSON representation
+    try:
+        resume_json = extract_resume_json_from_docx(data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse DOCX: {str(e)}")
+
+    now = dt.datetime.utcnow()
+
+    # Upsert BaseResume row
+    row = db.get(BaseResume, user_id)
+    content_text = json.dumps(resume_json, ensure_ascii=False)
+    if row:
+        row.content_text = content_text
+        row.updated_at = now
+    else:
+        row = BaseResume(
+            user_id=user_id,
+            content_text=content_text,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(row)
+
+    # Save original DOCX
+    filename = safe_filename(file.filename) or "base_resume.docx"
+    path = save_bytes(user_id, "base", filename, data)
+    sf = StoredFile(
+        id=f"base_resume_{user_id}_{int(now.timestamp())}",
+        user_id=user_id,
+        application_id="base",
+        kind="base_resume_docx",
+        path=path,
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=filename,
+        created_at=now,
+    )
+    db.add(sf)
+
+    db.commit()
+    exp_count = len(resume_json.get("experiences") or [])
+    bullets_count = sum(len((e.get("bullets") or [])) for e in (resume_json.get("experiences") or []))
+    return {
+        "ok": True,
+        "user_id": user_id,
+        "stored_file_id": sf.id,
+        "extracted": {"experiences": exp_count, "bullets": bullets_count},
+        "updated_at": now.isoformat(),
+    }
 
 
 @router.put("/users/{user_id}/base-resume")
