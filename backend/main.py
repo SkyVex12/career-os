@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.init_db import ensure_sqlite_schema
-from app.routers import auth_routes, users, applications, ingest, files, assistant, jd, resume_builder, outlook, email_updates
+from app.routers import auth_routes, users, applications, ingest, files, assistant, jd, resume_builder, outlook, email_updates, gate
 
 
 app = FastAPI(title="CareerOS API")
@@ -35,3 +35,4 @@ app.include_router(jd.router)
 app.include_router(resume_builder.router)
 app.include_router(outlook.router)
 app.include_router(email_updates.router)
+app.include_router(gate.router)

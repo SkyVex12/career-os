@@ -9,3 +9,6 @@ python-docx
 python-multipart
 
 requests>=2.31
+PyJWT>=2.8
+cloudinary
+psycopg2-binary
