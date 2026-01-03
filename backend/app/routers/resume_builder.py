@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import requests
 from typing import Any, Dict, List, Set
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -334,7 +335,11 @@ def export_tailored_docx(
         )
 
     try:
-        docx_bytes = open(sf.path, "rb").read()
+        # docx_bytes = open(sf.path, "rb").read()
+        resp = requests.get(sf.path, timeout=30)
+        resp.raise_for_status()
+        docx_bytes = resp.content
+
     except Exception:
         raise HTTPException(
             status_code=500, detail="Failed to read stored base resume docx"
