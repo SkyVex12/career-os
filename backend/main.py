@@ -3,8 +3,20 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.init_db import ensure_sqlite_schema
-from app.routers import auth_routes, users, applications, ingest, files, assistant, jd, resume_builder, outlook, email_updates, gate
+from app.init_db import ensure_schema
+from app.routers import (
+    auth_routes,
+    users,
+    applications,
+    ingest,
+    files,
+    assistant,
+    jd,
+    resume_builder,
+    outlook,
+    email_updates,
+    gate,
+)
 
 
 app = FastAPI(title="CareerOS API")
@@ -21,7 +33,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def _startup():
-    ensure_sqlite_schema()
+    ensure_schema()
 
 
 # Routers

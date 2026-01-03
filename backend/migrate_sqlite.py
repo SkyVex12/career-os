@@ -7,11 +7,11 @@ It will add missing columns like stored_files.filename.
 """
 
 from app.db import engine
-from app.init_db import ensure_sqlite_schema
+from app.init_db import ensure_schema
 
 
 def main():
-    ensure_sqlite_schema()
+    ensure_schema()
     print("OK: SQLite schema checked/updated.")
 
 
