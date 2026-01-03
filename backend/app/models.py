@@ -132,3 +132,54 @@ class StoredFile(Base):
     mime = Column(String, nullable=False)
     filename = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+class OutlookIntegration(Base):
+    __tablename__ = "outlook_integrations"
+    user_id = Column(String, primary_key=True)
+    account_email = Column(String, nullable=True)
+    access_token = Column(Text, nullable=True)
+    refresh_token = Column(Text, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+    last_sync_at = Column(DateTime, nullable=True)
+    auto_update = Column(Integer, default=0)  # 0/1
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class EmailEvent(Base):
+    __tablename__ = "email_events"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, index=True, nullable=False)
+    provider = Column(String, nullable=False, default="outlook")
+    message_id = Column(String, nullable=False)  # Graph message id
+    internet_message_id = Column(String, nullable=True)  # RFC 5322 Message-ID
+    from_email = Column(String, nullable=True)
+    subject = Column(String, nullable=True)
+    received_at = Column(DateTime, nullable=True)
+    body_preview = Column(Text, nullable=True)
+    web_link = Column(String, nullable=True)
+    raw_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "provider",
+            "internet_message_id",
+            name="uq_email_user_provider_internetid",
+        ),
+    )
+
+
+class ApplicationUpdateSuggestion(Base):
+    __tablename__ = "application_update_suggestions"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, index=True, nullable=False)
+    application_id = Column(String, index=True, nullable=True)
+    email_event_id = Column(Integer, ForeignKey("email_events.id"), nullable=False)
+    suggested_stage = Column(String, nullable=False)
+    confidence = Column(Integer, default=0)  # 0-100
+    reason = Column(Text, nullable=True)
+    status = Column(String, default="pending")  # pending|approved|rejected|applied
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)

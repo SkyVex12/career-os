@@ -7,3 +7,5 @@ docxtpl
 jinja2
 python-docx
 python-multipart
+
+requests>=2.31

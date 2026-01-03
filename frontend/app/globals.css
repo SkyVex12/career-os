@@ -1174,3 +1174,40 @@ textarea:focus {
 .chatThreadDelete:hover {
   background: rgba(255, 255, 255, 0.08);
 }
+
+
+/* --- Email updates page helpers --- */
+.formGrid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+.formGrid .full{ grid-column: 1 / -1; }
+
+.hint{
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.mono{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+}
+
+.pillOk{
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(52, 211, 153, 0.12);
+  color: rgba(209, 250, 229, 0.95);
+}
+.pillWarn{
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.12);
+  color: rgba(254, 243, 199, 0.95);
+}
+.pillDanger{
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.12);
+  color: rgba(254, 226, 226, 0.95);
+}

@@ -80,6 +80,7 @@ export default function Sidebar() {
     { href: "/applications", label: "Applications", icon: "apps" },
     { href: "/manage-users", label: "Manage users", icon: "users" },
     { href: "/documents", label: "Documents", icon: "apps" },
+    { href: "/email-updates", label: "Email updates", icon: "dashboard" },
     { href: "/assistant", label: "Assistant", icon: "users" },
   ];
 
