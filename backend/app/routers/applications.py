@@ -104,33 +104,47 @@ def applications_stats(
     days: int = Query(default=30, ge=1, le=365),
     db: Session = Depends(get_db),
 ):
+
+    def _floor_hour(dt: datetime) -> datetime:
+        return dt.replace(minute=0, second=0, microsecond=0)
+
+    def _floor_day(dt: datetime) -> datetime:
+        return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+
     qset = db.query(Application)
     if user_id:
         qset = qset.filter(Application.user_id == user_id)
 
+    # --- stage counts ---
     stage_rows = (
         qset.with_entities(
-            func.lower(Application.stage).label("stage"), func.count(Application.id)
+            func.lower(Application.stage).label("stage"),
+            func.count(Application.id).label("cnt"),
         )
         .group_by(func.lower(Application.stage))
         .all()
     )
-    stage_counts = {(r[0] or "applied"): int(r[1]) for r in stage_rows}
+    stage_counts = {(r.stage or "applied"): int(r.cnt) for r in stage_rows}
 
-    now = datetime.now(timezone.utc)
+    # IMPORTANT: use naive UTC to match Postgres `timestamp without time zone`
+    now = datetime.utcnow()
 
+    # --- time bucketing config ---
     if days == 1:
-        cutoff = now - timedelta(hours=23)
-        time_fmt = "%Y-%m-%d %H:00"
         step = "hour"
+        # last 24 hour-buckets including current hour
+        start = _floor_hour(now) - timedelta(hours=23)
+        cutoff = start
+        time_expr = func.date_trunc("hour", Application.created_at)
     else:
-        cutoff = now - timedelta(days=days - 1)
-        time_fmt = "%Y-%m-%d"
         step = "day"
+        # last N day-buckets including today (UTC day)
+        start = _floor_day(now) - timedelta(days=days - 1)
+        cutoff = start
+        time_expr = func.date_trunc("day", Application.created_at)
 
-    time_expr = func.date_trunc("hour", Application.created_at)
-
-    day_rows = (
+    # --- query grouped counts ---
+    rows = (
         qset.filter(Application.created_at >= cutoff)
         .with_entities(
             time_expr.label("t"),
@@ -141,19 +155,31 @@ def applications_stats(
         .all()
     )
 
-    day_map = {r[0]: int(r[1]) for r in day_rows}
+    # Keys shown here are datetimes (bucket starts)
+    bucket_counts = {r.t: int(r.cnt) for r in rows}
 
+    # --- build series (use datetime keys, format only for output) ---
     series = []
-
     if step == "hour":
         for i in range(24):
-            t = (cutoff + timedelta(hours=i)).strftime(time_fmt)
-            series.append({"time": t, "count": day_map.get(t, 0)})
+            bucket = start + timedelta(hours=i)  # naive datetime key
+            series.append(
+                {
+                    "time": bucket.strftime("%Y-%m-%d %H:00"),
+                    "count": bucket_counts.get(bucket, 0),
+                }
+            )
     else:
         for i in range(days):
-            d = (cutoff + timedelta(days=i)).date().isoformat()
-            series.append({"day": d, "count": day_map.get(d, 0)})
+            bucket = start + timedelta(days=i)  # naive datetime key
+            series.append(
+                {
+                    "day": bucket.date().isoformat(),
+                    "count": bucket_counts.get(bucket, 0),
+                }
+            )
 
+    # --- rates and totals ---
     total = int(sum(stage_counts.values()))
     interviews = int(stage_counts.get("interview", 0))
     offers = int(stage_counts.get("offer", 0))
