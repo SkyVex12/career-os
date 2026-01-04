@@ -701,9 +701,17 @@ export default function ApplicationsPage() {
                             ? new Date(a.created_at).toLocaleDateString()
                             : "—"}
                         </span>
-                        {(a.resume_pdf_download_url || a.resume_docx_download_url) ? (
-                          \1                            onClick={() => track("Resume Downloaded", { appId: a.id, type: a.resume_pdf_download_url ? "pdf" : "docx" })}
-\2
+                        {a.resume_pdf_download_url ||
+                        a.resume_docx_download_url ? (
+                          <a
+                            onClick={() =>
+                              track("Resume Downloaded", {
+                                appId: a.id,
+                                type: a.resume_pdf_download_url
+                                  ? "pdf"
+                                  : "docx",
+                              })
+                            }
                             rel="noreferrer"
                           >
                             resume
