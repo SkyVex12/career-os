@@ -172,8 +172,8 @@ def applications_stats(
         for k in py_keys:
             series.append({"day": k, "count": day_map.get(k, 0)})
 
-    print("sample db keys:", list(day_map.keys())[:5])
-    print("sample py keys:", py_keys[:5])
+    print("sample db keys:", list(day_map.keys()))
+    print("sample py keys:", py_keys)
     total = int(sum(stage_counts.values()))
     interviews = int(stage_counts.get("interview", 0))
     offers = int(stage_counts.get("offer", 0))
