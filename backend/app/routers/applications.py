@@ -128,13 +128,13 @@ def applications_stats(
         time_fmt = "%Y-%m-%d"
         step = "day"
 
-    time_expr = func.strftime(time_fmt, Application.created_at)
+    time_expr = func.date_trunc("hour", Application.created_at)
 
     day_rows = (
         qset.filter(Application.created_at >= cutoff)
         .with_entities(
             time_expr.label("t"),
-            func.count(Application.id),
+            func.count(Application.id).label("cnt"),
         )
         .group_by(time_expr)
         .order_by(time_expr)

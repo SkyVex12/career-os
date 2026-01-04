@@ -48,3 +48,21 @@ app.include_router(resume_builder.router)
 app.include_router(outlook.router)
 app.include_router(email_updates.router)
 app.include_router(gate.router)
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
+
+
+@app.get("/readyz")
+def readyz():
+    # Basic readiness: DB connection works
+    try:
+        from app.db import SessionLocal
+        db = SessionLocal()
+        from sqlalchemy import text
+        db.execute(text("SELECT 1"))
+        db.close()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

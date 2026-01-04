@@ -4,6 +4,8 @@ import base64
 import json
 import re
 import requests
+import zipfile
+from io import BytesIO
 from typing import Any, Dict, List, Set
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,6 +16,7 @@ from ..auth import Principal, get_principal
 from ..db import SessionLocal
 from ..models import AdminUser, BaseResume, JDKeyInfo, StoredFile
 from ..resume_docx import replace_bullets_in_docx, replace_summary_in_docx
+from ..pdf import resume_to_pdf_bytes
 from ..ai import tailor_rewrite_resume
 
 router = APIRouter()
@@ -137,6 +140,8 @@ class TailorBulletsIn(BaseModel):
     jd_key_id: int
     bullets_per_role: int = Field(default=5, ge=1, le=10)  # kept for compat
     max_roles: int = Field(default=4, ge=1, le=10)
+    include_cover_letter: bool = False
+    cover_letter_instructions: str = ""
 
 
 class TailorBulletsOut(BaseModel):
@@ -144,6 +149,7 @@ class TailorBulletsOut(BaseModel):
     keywords_covered: List[str]
     gaps: List[str]
     summary: str = ""
+    cover_letter: str = ""
 
 
 # ---------------------------
@@ -216,6 +222,8 @@ def tailor_bullets(
             core_hard=core_hard,
             core_soft=core_soft,
             required_phrases=required_phrases,
+            include_cover_letter=payload.include_cover_letter,
+            cover_letter_instructions=payload.cover_letter_instructions,
         )
     except Exception as e:
         print("AI error:", e)
@@ -246,9 +254,12 @@ def tailor_bullets(
             keywords_covered=sorted(list(covered_all)),
             gaps=gaps,
             summary=summary_original,
+            cover_letter="",
         )
     # Apply summary (clamp)
     tailored_summary = ai.get("summary") or summary_original
+
+    tailored_cover_letter = (ai.get("cover_letter") or "").strip() if payload.include_cover_letter else ""
 
     # Apply bullet rewrites deterministically (same count, same order per exp)
     exp_rewrites = {
@@ -291,6 +302,7 @@ def tailor_bullets(
         keywords_covered=sorted(list(covered_all)),
         gaps=gaps,
         summary=tailored_summary,
+        cover_letter=tailored_cover_letter,
     )
 
 
@@ -304,6 +316,9 @@ class ExportTailoredDocxIn(BaseModel):
     jd_key_id: int
     bullets_per_role: int = Field(default=5, ge=1, le=10)
     max_roles: int = Field(default=4, ge=1, le=10)
+    export_format: str = Field(default="docx", description="docx | pdf | both")
+    include_cover_letter: bool = False
+    cover_letter_instructions: str = ""
 
 
 @router.post("/v1/resume/export-tailored-docx")
@@ -351,6 +366,8 @@ def export_tailored_docx(
             jd_key_id=payload.jd_key_id,
             bullets_per_role=payload.bullets_per_role,
             max_roles=payload.max_roles,
+            include_cover_letter=payload.include_cover_letter,
+            cover_letter_instructions=payload.cover_letter_instructions,
         ),
         db=db,
         principal=principal,
@@ -368,13 +385,60 @@ def export_tailored_docx(
         new_by_block[i] = exp.get("bullets") or []
 
     out_bytes = replace_bullets_in_docx(docx_bytes, bullet_blocks, new_by_block)
-    b64 = base64.b64encode(out_bytes).decode("utf-8")
 
+    # Optional PDF export (simple renderer)
+    pdf_bytes = resume_to_pdf_bytes(
+        title="Resume",
+        summary=tailored.summary,
+        experiences=tailored.selected_experiences,
+    )
+
+    docx_b64 = base64.b64encode(out_bytes).decode("utf-8")
+    pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
+
+    fmt = (payload.export_format or "docx").lower().strip()
+    if fmt not in ("docx", "pdf", "both"):
+        raise HTTPException(status_code=400, detail="export_format must be one of: docx, pdf, both")
+
+    # If both, return a zip (base64)
+    if fmt == "both":
+        buf = BytesIO()
+        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("resume.docx", out_bytes)
+            z.writestr("resume.pdf", pdf_bytes)
+            if (tailored.cover_letter or "").strip():
+                z.writestr("cover_letter.txt", tailored.cover_letter.strip() + "\n")
+        zip_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+        return {
+            "ok": True,
+            "bundle_zip_base64": zip_b64,
+            "bundle_filenames": ["resume.docx", "resume.pdf"]
+            + (["cover_letter.txt"] if (tailored.cover_letter or "").strip() else []),
+            "template_source": sf.filename,
+            "summary": tailored.summary,
+            "cover_letter": tailored.cover_letter,
+            "selected_experiences": tailored.selected_experiences,
+            "gaps": tailored.gaps,
+        }
+
+    if fmt == "pdf":
+        return {
+            "ok": True,
+            "resume_pdf_base64": pdf_b64,
+            "template_source": sf.filename,
+            "summary": tailored.summary,
+            "cover_letter": tailored.cover_letter,
+            "selected_experiences": tailored.selected_experiences,
+            "gaps": tailored.gaps,
+        }
+
+    # default: docx
     return {
         "ok": True,
-        "resume_docx_base64": b64,
+        "resume_docx_base64": docx_b64,
         "template_source": sf.filename,
         "summary": tailored.summary,
+        "cover_letter": tailored.cover_letter,
         "selected_experiences": tailored.selected_experiences,
         "gaps": tailored.gaps,
     }
