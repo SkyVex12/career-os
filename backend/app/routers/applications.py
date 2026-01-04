@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel, Field
 
 from ..auth import Principal, get_db, get_principal
-from ..models import Application, AdminUser, Admin, User
+from ..models import Application, AdminUser, Admin, User, StoredFile
 
 router = APIRouter(prefix="/v1", tags=["applications"])
 
@@ -160,6 +160,24 @@ def applications_stats(
         .all()
     )
 
+    # Attach latest resume files (docx/pdf) per application.
+    app_ids = [a.id for a in rows]
+    file_map = {}  # (app_id, kind) -> StoredFile
+    if app_ids:
+        rows = (
+            db.query(StoredFile)
+            .filter(
+                StoredFile.application_id.in_(app_ids),
+                StoredFile.kind.in_(["resume_docx", "resume_pdf"]),
+            )
+            .order_by(StoredFile.created_at.desc())
+            .all()
+        )
+        for f in rows:
+            key = (f.application_id, f.kind)
+            if key not in file_map:
+                file_map[key] = f
+
     # t is now a string key (same type as py_keys)
     day_map = {r.t: int(r.cnt) for r in rows}
 
@@ -241,8 +259,26 @@ def list_applications(
         .limit(page_size)
         .all()
     )
+    app_ids = [a.id for a in items]
+    file_map = {}  # (app_id, kind) -> StoredFile
+    if app_ids:
+        rows = (
+            db.query(StoredFile)
+            .filter(
+                StoredFile.application_id.in_(app_ids),
+                StoredFile.kind.in_(["resume_docx", "resume_pdf"]),
+            )
+            .order_by(StoredFile.created_at.desc())
+            .all()
+        )
+        for f in rows:
+            key = (f.application_id, f.kind)
+            if key not in file_map:
+                file_map[key] = f
 
     def to_dict(a: Application):
+        docx = file_map.get((a.id, "resume_docx"))
+        pdf = file_map.get((a.id, "resume_pdf"))
         return {
             "id": a.id,
             "user_id": a.user_id,
@@ -253,6 +289,17 @@ def list_applications(
             "url": a.url,
             "source_site": a.source_site,
             "created_at": a.created_at.isoformat() if a.created_at else None,
+            "resume_docx_file_id": docx.id if docx else None,
+            "resume_pdf_file_id": pdf.id if pdf else None,
+            "resume_version_id": (
+                pdf.resume_version_id
+                if pdf and getattr(pdf, "resume_version_id", None)
+                else (docx.resume_version_id if docx else None)
+            ),
+            "resume_docx_download_url": (
+                f"/v1/files/{docx.id}/download" if docx else None
+            ),
+            "resume_pdf_download_url": f"/v1/files/{pdf.id}/download" if pdf else None,
         }
 
     return {

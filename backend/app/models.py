@@ -122,11 +122,24 @@ class JobDescription(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+
+class ResumeVersion(Base):
+    __tablename__ = "resume_versions"
+    id = Column(String, primary_key=True)
+    user_id = Column(String, index=True, nullable=False)
+    application_id = Column(String, index=True, nullable=True)  # optional
+    jd_key_id = Column(Integer, nullable=True)
+    schema_version = Column(String, nullable=False, default="tailor_v2")
+    tailored_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class StoredFile(Base):
     __tablename__ = "stored_files"
     id = Column(String, primary_key=True)
     user_id = Column(String, index=True, nullable=False)
     application_id = Column(String, index=True, nullable=False)
+    resume_version_id = Column(String, index=True, nullable=True)
     kind = Column(String, nullable=False)  # resume_docx, cover_docx, resume_pdf...
     path = Column(String, nullable=False)
     mime = Column(String, nullable=False)

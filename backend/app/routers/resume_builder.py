@@ -259,7 +259,9 @@ def tailor_bullets(
     # Apply summary (clamp)
     tailored_summary = ai.get("summary") or summary_original
 
-    tailored_cover_letter = (ai.get("cover_letter") or "").strip() if payload.include_cover_letter else ""
+    tailored_cover_letter = (
+        (ai.get("cover_letter") or "").strip() if payload.include_cover_letter else ""
+    )
 
     # Apply bullet rewrites deterministically (same count, same order per exp)
     exp_rewrites = {
@@ -398,7 +400,9 @@ def export_tailored_docx(
 
     fmt = (payload.export_format or "docx").lower().strip()
     if fmt not in ("docx", "pdf", "both"):
-        raise HTTPException(status_code=400, detail="export_format must be one of: docx, pdf, both")
+        raise HTTPException(
+            status_code=400, detail="export_format must be one of: docx, pdf, both"
+        )
 
     # If both, return a zip (base64)
     if fmt == "both":

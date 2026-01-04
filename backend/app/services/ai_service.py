@@ -4,6 +4,8 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
+from pydantic import BaseModel, Field, ValidationError
+
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -54,6 +56,19 @@ _TAILOR_RESUME_SCHEMA_V2 = {
     },
 }
 
+
+
+class TailoredExperience(BaseModel):
+    source_index: int = Field(ge=0)
+    header: str = ""
+    bullets: List[str] = Field(default_factory=list)
+
+class TailorResumeResult(BaseModel):
+    summary: str
+    cover_letter: str = ""
+    experiences: List[TailoredExperience] = Field(default_factory=list)
+    selected_experiences: List[int] = Field(default_factory=list)
+    gaps: List[str] = Field(default_factory=list)
 
 def tailor_rewrite_resume(
     *,
@@ -121,5 +136,37 @@ def tailor_rewrite_resume(
             }
         },
     )
+    raw = resp.output_text or ""
+    data = json.loads(raw)
 
-    return json.loads(resp.output_text)
+    try:
+        validated = TailorResumeResult.model_validate(data)
+        return validated.model_dump()
+    except ValidationError:
+        repair = svc.client.responses.create(
+            model=model,
+            input=[
+                {
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": "Return VALID JSON that matches the provided JSON Schema exactly. Fix any issues and return only the corrected JSON.",
+                        }
+                    ],
+                },
+                {"role": "user", "content": [{"type": "input_text", "text": raw}]},
+            ],
+            temperature=0.0,
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": _TAILOR_RESUME_SCHEMA_V2["name"],
+                    "schema": _TAILOR_RESUME_SCHEMA_V2["schema"],
+                }
+            },
+        )
+        repaired_raw = repair.output_text or ""
+        repaired = json.loads(repaired_raw)
+        validated2 = TailorResumeResult.model_validate(repaired)
+        return validated2.model_dump()

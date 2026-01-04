@@ -18,6 +18,8 @@ def get_db():
 
 
 @router.get("/files/{file_id}")
+@router.get("/v1/files/{file_id}")
+@router.get("/v1/files/{file_id}/download")
 def download_file(
     file_id: str,
     db: Session = Depends(get_db),

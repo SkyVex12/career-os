@@ -119,15 +119,39 @@ def migrate_sqlite(engine: Engine) -> None:
                 text("UPDATE job_descriptions SET user_id = COALESCE(user_id, 'u1');")
             )
 
+    
     # applications.source_site (human-entered source site name: indeed, linkedin, etc.)
     if not _has_column(engine, "applications", "source_site"):
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE applications ADD COLUMN source_site TEXT;"))
 
-        # stored_files.user_id
-        if not _has_column(engine, "stored_files", "user_id"):
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE stored_files ADD COLUMN user_id TEXT;"))
-                conn.execute(
-                    text("UPDATE stored_files SET user_id = COALESCE(user_id, 'u1');")
+    # stored_files.user_id
+    if _has_table(engine, "stored_files") and (not _has_column(engine, "stored_files", "user_id")):
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE stored_files ADD COLUMN user_id TEXT;"))
+            conn.execute(text("UPDATE stored_files SET user_id = COALESCE(user_id, 'u1');"))
+
+    # stored_files.resume_version_id
+    if _has_table(engine, "stored_files") and (not _has_column(engine, "stored_files", "resume_version_id")):
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE stored_files ADD COLUMN resume_version_id TEXT;"))
+
+    # resume_versions table
+    if not _has_table(engine, "resume_versions"):
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+            CREATE TABLE IF NOT EXISTS resume_versions (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                application_id TEXT,
+                jd_key_id INTEGER,
+                schema_version TEXT NOT NULL DEFAULT 'tailor_v2',
+                tailored_json TEXT NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+            );
+            """
                 )
+            )
+

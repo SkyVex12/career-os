@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "../lib/api";
+import { track } from "../lib/analytics";
 import TopbarClient from "../components/TopbarClient";
 import StageBadge from "../components/StageBadge";
 
@@ -431,6 +432,7 @@ export default function ApplicationsPage() {
                   <th style={{ width: "14%" }}>Source</th>
                   <th style={{ width: "16%" }}>Stage</th>
                   <th style={{ width: "12%" }}>Date</th>
+                  <th style={{ width: "10%" }}>Resume</th>
                   <th style={{ width: "10%" }}>URL</th>
                 </tr>
               </thead>
@@ -699,6 +701,17 @@ export default function ApplicationsPage() {
                             ? new Date(a.created_at).toLocaleDateString()
                             : "—"}
                         </span>
+                        {(a.resume_pdf_download_url || a.resume_docx_download_url) ? (
+                          \1                            onClick={() => track("Resume Downloaded", { appId: a.id, type: a.resume_pdf_download_url ? "pdf" : "docx" })}
+\2
+                            rel="noreferrer"
+                          >
+                            resume
+                          </a>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+
                         {a.url ? (
                           <a href={a.url} target="_blank" rel="noreferrer">
                             open
