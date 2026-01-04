@@ -104,18 +104,11 @@ def applications_stats(
     days: int = Query(default=30, ge=1, le=365),
     db: Session = Depends(get_db),
 ):
-
-    def _floor_hour(dt: datetime) -> datetime:
-        return dt.replace(minute=0, second=0, microsecond=0)
-
-    def _floor_day(dt: datetime) -> datetime:
-        return dt.replace(hour=0, minute=0, second=0, microsecond=0)
-
     qset = db.query(Application)
     if user_id:
         qset = qset.filter(Application.user_id == user_id)
 
-    # --- stage counts ---
+    # ---- stage counts ----
     stage_rows = (
         qset.with_entities(
             func.lower(Application.stage).label("stage"),
@@ -126,24 +119,36 @@ def applications_stats(
     )
     stage_counts = {(r.stage or "applied"): int(r.cnt) for r in stage_rows}
 
-    # IMPORTANT: use naive UTC to match Postgres `timestamp without time zone`
+    # Use UTC "now" (naive). This matches most setups where created_at is stored as UTC.
     now = datetime.utcnow()
 
-    # --- time bucketing config ---
+    # ---- series config ----
     if days == 1:
         step = "hour"
-        # last 24 hour-buckets including current hour
-        start = _floor_hour(now) - timedelta(hours=23)
-        cutoff = start
-        time_expr = func.date_trunc("hour", Application.created_at)
+        cutoff = now - timedelta(hours=23)
+        py_keys = [
+            (cutoff + timedelta(hours=i)).strftime("%Y-%m-%d %H:00") for i in range(24)
+        ]
+        sqlite_fmt = "%Y-%m-%d %H:00"
+        pg_fmt = "YYYY-MM-DD HH24:00"
     else:
         step = "day"
-        # last N day-buckets including today (UTC day)
-        start = _floor_day(now) - timedelta(days=days - 1)
-        cutoff = start
-        time_expr = func.date_trunc("day", Application.created_at)
+        cutoff = now - timedelta(days=days - 1)
+        py_keys = [(cutoff + timedelta(days=i)).date().isoformat() for i in range(days)]
+        sqlite_fmt = "%Y-%m-%d"
+        pg_fmt = "YYYY-MM-DD"
 
-    # --- query grouped counts ---
+    # ---- build time expression as STRING (dialect-safe) ----
+    dialect = db.get_bind().dialect.name  # "postgresql" or "sqlite" etc.
+
+    if dialect == "postgresql":
+        # Normalize to UTC text. Works well even if your DB/session timezone is not UTC.
+        # If created_at is "timestamp without time zone" and already UTC, this is still fine.
+        created_at_utc = func.timezone("UTC", Application.created_at)
+        time_expr = func.to_char(created_at_utc, pg_fmt)
+    else:
+        # SQLite
+        time_expr = func.strftime(sqlite_fmt, Application.created_at)
     rows = (
         qset.filter(Application.created_at >= cutoff)
         .with_entities(
@@ -155,31 +160,20 @@ def applications_stats(
         .all()
     )
 
-    # Keys shown here are datetimes (bucket starts)
-    bucket_counts = {r.t: int(r.cnt) for r in rows}
+    # t is now a string key (same type as py_keys)
+    day_map = {r.t: int(r.cnt) for r in rows}
 
-    # --- build series (use datetime keys, format only for output) ---
+    # ---- build series ----
     series = []
     if step == "hour":
-        for i in range(24):
-            bucket = start + timedelta(hours=i)  # naive datetime key
-            series.append(
-                {
-                    "time": bucket.strftime("%Y-%m-%d %H:00"),
-                    "count": bucket_counts.get(bucket, 0),
-                }
-            )
+        for k in py_keys:
+            series.append({"time": k, "count": day_map.get(k, 0)})
     else:
-        for i in range(days):
-            bucket = start + timedelta(days=i)  # naive datetime key
-            series.append(
-                {
-                    "day": bucket.date().isoformat(),
-                    "count": bucket_counts.get(bucket, 0),
-                }
-            )
+        for k in py_keys:
+            series.append({"day": k, "count": day_map.get(k, 0)})
 
-    # --- rates and totals ---
+    print("sample db keys:", list(day_map.keys())[:5])
+    print("sample py keys:", py_keys[:5])
     total = int(sum(stage_counts.values()))
     interviews = int(stage_counts.get("interview", 0))
     offers = int(stage_counts.get("offer", 0))
@@ -189,8 +183,8 @@ def applications_stats(
     return {
         "total": total,
         "stage_counts": stage_counts,
-        "series": series,  # hourly OR daily
-        "series_unit": step,  # "hour" | "day"
+        "series": series,
+        "series_unit": step,
         "success_rate": offers / max(1, total),
         "interview_rate": interviews / max(1, total),
         "rejection_rate": rejected / max(1, total),
