@@ -712,6 +712,11 @@ export default function ApplicationsPage() {
                                   : "docx",
                               })
                             }
+                            href={
+                              a.resume_pdf_download_url ||
+                              a.resume_docx_download_url
+                            }
+                            target="_blank"
                             rel="noreferrer"
                           >
                             resume

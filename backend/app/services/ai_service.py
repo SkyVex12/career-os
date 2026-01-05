@@ -34,28 +34,22 @@ _TAILOR_RESUME_SCHEMA_V2 = {
                     "type": "object",
                     "additionalProperties": False,
                     "properties": {
-                        "exp_index": {"type": "integer", "minimum": 0},
-                        "rewrites": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "properties": {
-                                    "source_index": {"type": "integer", "minimum": 0},
-                                    "rewritten": {"type": "string"},
-                                },
-                                "required": ["source_index", "rewritten"],
-                            },
-                        },
+                        "source_index": {"type": "integer", "minimum": 0},
+                        "header": {"type": "string"},
+                        "bullets": {"type": "array", "items": {"type": "string"}},
                     },
-                    "required": ["exp_index", "rewrites"],
+                    "required": ["source_index", "header", "bullets"],
                 },
             },
+            "selected_experiences": {
+                "type": "array",
+                "items": {"type": "integer", "minimum": 0},
+            },
+            "gaps": {"type": "array", "items": {"type": "string"}},
         },
         "required": ["summary", "cover_letter", "experiences"],
     },
 }
-
 
 
 class TailoredExperience(BaseModel):
@@ -63,12 +57,14 @@ class TailoredExperience(BaseModel):
     header: str = ""
     bullets: List[str] = Field(default_factory=list)
 
+
 class TailorResumeResult(BaseModel):
     summary: str
     cover_letter: str = ""
     experiences: List[TailoredExperience] = Field(default_factory=list)
     selected_experiences: List[int] = Field(default_factory=list)
     gaps: List[str] = Field(default_factory=list)
+
 
 def tailor_rewrite_resume(
     *,
@@ -109,7 +105,9 @@ def tailor_rewrite_resume(
         "experiences": [
             {
                 "exp_index": i,
-                "bullets": [{"source_index": j, "text": b} for j, b in enumerate(bullets)],
+                "bullets": [
+                    {"source_index": j, "text": b} for j, b in enumerate(bullets)
+                ],
             }
             for i, bullets in enumerate(experiences)
         ],
@@ -142,7 +140,8 @@ def tailor_rewrite_resume(
     try:
         validated = TailorResumeResult.model_validate(data)
         return validated.model_dump()
-    except ValidationError:
+    except ValidationError as e:
+        print("TAILOR VALIDATION ERROR:", e)
         repair = svc.client.responses.create(
             model=model,
             input=[
