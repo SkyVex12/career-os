@@ -23,9 +23,10 @@ def get_db():
 def download_file(
     file_id: str,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_principal),
+    # principal: Principal = Depends(get_principal),
 ):
     f = db.get(StoredFile, file_id)
+    print("file:", f)
     if not f:
         raise HTTPException(404, "File not found")
 
