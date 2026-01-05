@@ -19,8 +19,8 @@ class AIService:
         self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
 
 
-_TAILOR_RESUME_SCHEMA_V2 = {
-    "name": "resume_tailor_summary_bullets_cover_v2",
+_TAILOR_RESUME_SCHEMA = {
+    "name": "resume_tailor_summary_and_bullets_v1",
     "strict": True,
     "schema": {
         "type": "object",
@@ -34,18 +34,23 @@ _TAILOR_RESUME_SCHEMA_V2 = {
                     "type": "object",
                     "additionalProperties": False,
                     "properties": {
-                        "source_index": {"type": "integer", "minimum": 0},
-                        "header": {"type": "string"},
-                        "bullets": {"type": "array", "items": {"type": "string"}},
+                        "exp_index": {"type": "integer", "minimum": 0},
+                        "rewrites": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "source_index": {"type": "integer", "minimum": 0},
+                                    "rewritten": {"type": "string"},
+                                },
+                                "required": ["source_index", "rewritten"],
+                            },
+                        },
                     },
-                    "required": ["source_index", "header", "bullets"],
+                    "required": ["exp_index", "rewrites"],
                 },
             },
-            "selected_experiences": {
-                "type": "array",
-                "items": {"type": "integer", "minimum": 0},
-            },
-            "gaps": {"type": "array", "items": {"type": "string"}},
         },
         "required": ["summary", "cover_letter", "experiences"],
     },
@@ -62,8 +67,6 @@ class TailorResumeResult(BaseModel):
     summary: str
     cover_letter: str = ""
     experiences: List[TailoredExperience] = Field(default_factory=list)
-    selected_experiences: List[int] = Field(default_factory=list)
-    gaps: List[str] = Field(default_factory=list)
 
 
 def tailor_rewrite_resume(
@@ -129,8 +132,8 @@ def tailor_rewrite_resume(
         text={
             "format": {
                 "type": "json_schema",
-                "name": _TAILOR_RESUME_SCHEMA_V2["name"],
-                "schema": _TAILOR_RESUME_SCHEMA_V2["schema"],
+                "name": _TAILOR_RESUME_SCHEMA["name"],
+                "schema": _TAILOR_RESUME_SCHEMA["schema"],
             }
         },
     )
@@ -160,8 +163,8 @@ def tailor_rewrite_resume(
             text={
                 "format": {
                     "type": "json_schema",
-                    "name": _TAILOR_RESUME_SCHEMA_V2["name"],
-                    "schema": _TAILOR_RESUME_SCHEMA_V2["schema"],
+                    "name": _TAILOR_RESUME_SCHEMA["name"],
+                    "schema": _TAILOR_RESUME_SCHEMA["schema"],
                 }
             },
         )

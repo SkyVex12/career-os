@@ -160,24 +160,6 @@ def applications_stats(
         .all()
     )
 
-    # Attach latest resume files (docx/pdf) per application.
-    app_ids = [a.id for a in rows]
-    file_map = {}  # (app_id, kind) -> StoredFile
-    if app_ids:
-        rows = (
-            db.query(StoredFile)
-            .filter(
-                StoredFile.application_id.in_(app_ids),
-                StoredFile.kind.in_(["resume_docx", "resume_pdf"]),
-            )
-            .order_by(StoredFile.created_at.desc())
-            .all()
-        )
-        for f in rows:
-            key = (f.application_id, f.kind)
-            if key not in file_map:
-                file_map[key] = f
-
     # t is now a string key (same type as py_keys)
     day_map = {r.t: int(r.cnt) for r in rows}
 
