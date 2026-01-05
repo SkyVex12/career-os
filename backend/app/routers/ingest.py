@@ -164,7 +164,20 @@ def apply_and_generate(
         db.add(stored_pdf)
 
     db.commit()
-
+    print(
+        {
+            "application_id": app_row.id,
+            "resume_version_id": rv_id,
+            "resume_docx_file_id": file_id,
+            "resume_pdf_file_id": resume_pdf_file_id,
+            "resume_docx_download_url": f"/v1/files/{file_id}/download",
+            "resume_pdf_download_url": (
+                f"/v1/files/{resume_pdf_file_id}/download"
+                if resume_pdf_file_id
+                else None
+            ),
+        }
+    )
     return {
         "application_id": app_row.id,
         "resume_version_id": rv_id,
