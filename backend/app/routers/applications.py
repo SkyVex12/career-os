@@ -278,10 +278,8 @@ def list_applications(
                 if pdf and getattr(pdf, "resume_version_id", None)
                 else (docx.resume_version_id if docx else None)
             ),
-            "resume_docx_download_url": (
-                f"/v1/files/{docx.id}/download" if docx else None
-            ),
-            "resume_pdf_download_url": f"/v1/files/{pdf.id}/download" if pdf else None,
+            "resume_docx_download_url": docx.path if docx else None,
+            "resume_pdf_download_url": pdf.path if pdf else None,
         }
 
     return {

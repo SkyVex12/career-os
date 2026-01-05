@@ -32,6 +32,7 @@ def save_bytes(user_info: str, application_id: str, filename: str, data: bytes) 
         data,
         resource_type="raw",  # IMPORTANT for pdf/docx/etc
         type="upload",
+        folder=f"career-os/{application_id}",
         public_id=f"{user_info}/{application_id}/{filename}",
         overwrite=True,
     )

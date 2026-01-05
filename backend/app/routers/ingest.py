@@ -194,6 +194,7 @@ def apply_and_generate(
                 if resume_pdf_file_id
                 else None
             ),
+            "cover_letter": data["cover_letter"],
         }
     )
     return {
@@ -205,4 +206,5 @@ def apply_and_generate(
         "resume_pdf_download_url": (
             f"/v1/files/{resume_pdf_file_id}/download" if resume_pdf_file_id else None
         ),
+        "cover_letter": data["cover_letter"],
     }
