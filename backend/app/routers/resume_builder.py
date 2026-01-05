@@ -390,7 +390,8 @@ def export_tailored_docx(
     out_bytes = replace_bullets_in_docx(docx_bytes, bullet_blocks, new_by_block)
 
     # Optional PDF export
-    pdf_bytes = docx_bytes_to_pdf_bytes(out_bytes)
+    # pdf_bytes = docx_bytes_to_pdf_bytes(out_bytes)
+    pdf_bytes = out_bytes
 
     docx_b64 = base64.b64encode(out_bytes).decode("utf-8")
     pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
