@@ -57,10 +57,14 @@ _TAILOR_RESUME_SCHEMA = {
 }
 
 
-class TailoredExperience(BaseModel):
+class Rewrite(BaseModel):
     source_index: int = Field(ge=0)
-    header: str = ""
-    bullets: List[str] = Field(default_factory=list)
+    rewritten: str = ""
+
+
+class TailoredExperience(BaseModel):
+    exp_index: int = Field(ge=0)
+    rewrites: List[Rewrite] = Field(default_factory=list)
 
 
 class TailorResumeResult(BaseModel):
@@ -139,7 +143,7 @@ def tailor_rewrite_resume(
     )
     raw = resp.output_text or ""
     data = json.loads(raw)
-
+    print(data)
     try:
         validated = TailorResumeResult.model_validate(data)
         return validated.model_dump()
