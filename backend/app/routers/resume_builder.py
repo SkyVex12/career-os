@@ -18,6 +18,7 @@ from ..models import AdminUser, BaseResume, JDKeyInfo, StoredFile
 from ..resume_docx import replace_bullets_in_docx, replace_summary_in_docx
 from ..pdf import resume_to_pdf_bytes
 from ..ai import tailor_rewrite_resume
+from ..services.pdf_service import docx_bytes_to_pdf_bytes
 
 router = APIRouter()
 
@@ -388,12 +389,8 @@ def export_tailored_docx(
 
     out_bytes = replace_bullets_in_docx(docx_bytes, bullet_blocks, new_by_block)
 
-    # Optional PDF export (simple renderer)
-    pdf_bytes = resume_to_pdf_bytes(
-        title="Resume",
-        summary=tailored.summary,
-        experiences=tailored.selected_experiences,
-    )
+    # Optional PDF export
+    pdf_bytes = docx_bytes_to_pdf_bytes(out_bytes)
 
     docx_b64 = base64.b64encode(out_bytes).decode("utf-8")
     pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")

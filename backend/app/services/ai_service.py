@@ -119,7 +119,7 @@ def tailor_rewrite_resume(
             for i, bullets in enumerate(experiences)
         ],
         "cover_letter": {
-            "include": bool(include_cover_letter),
+            "include": bool(True),
             "instructions": cover_letter_instructions or "",
         },
     }
