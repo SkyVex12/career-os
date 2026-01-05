@@ -85,7 +85,10 @@ def apply_and_generate(
             created_at=now,
             updated_at=now,
         )
+        print("before add app: in transaction?", db.in_transaction())
         db.add(app_row)
+        db.flush()
+        print("after flush app exists?", db.get(Application, app_row.id) is not None)
 
         jd_row = JobDescription(
             user_id=payload.user_id,
@@ -93,6 +96,11 @@ def apply_and_generate(
             jd_text=payload.jd_text,
         )
         db.add(jd_row)
+        db.flush()
+        print(
+            "after flush jd exists?",
+            db.query(JobDescription).filter_by(application_id=app_row.id).count(),
+        )
 
     keys = get_or_create_jd_keys(payload, db, principal)
     data = export_tailored_docx(
@@ -143,6 +151,11 @@ def apply_and_generate(
         created_at=now,
     )
     db.add(stored)
+    db.flush()
+    print(
+        "after flush stored files:",
+        db.query(StoredFile).filter_by(application_id=app_row.id).count(),
+    )
 
     resume_pdf_file_id = None
     if pdf_bytes:
@@ -162,6 +175,11 @@ def apply_and_generate(
             created_at=now,
         )
         db.add(stored_pdf)
+        db.flush()
+        print(
+            "after flush stored files:",
+            db.query(StoredFile).filter_by(application_id=app_row.id).count(),
+        )
 
     db.commit()
     print(
