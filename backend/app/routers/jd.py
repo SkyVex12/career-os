@@ -130,7 +130,7 @@ def get_or_create_jd_keys(
         created_at=now,
     )
     db.add(row)
-    db.refresh(row)
+    db.flush()
 
     return {
         "cache_hit": False,
