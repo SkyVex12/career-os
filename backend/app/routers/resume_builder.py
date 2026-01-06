@@ -168,10 +168,12 @@ def tailor_bullets(
 
     br = db.get(BaseResume, payload.user_id)
     if not br:
+        print("br+++++++++++++++++")
         raise HTTPException(status_code=404, detail="Base resume not found")
 
     jd = db.get(JDKeyInfo, payload.jd_key_id)
     if not jd:
+        print("jd+++++++++++++++++")
         raise HTTPException(status_code=404, detail="JD keys not found")
 
     resume = _load_base_resume_json(br)
@@ -334,6 +336,7 @@ def export_tailored_docx(
 
     br = db.query(BaseResume).filter(BaseResume.user_id == payload.user_id).first()
     if not br:
+        print("br in export+++++++++++++++++")
         raise HTTPException(status_code=404, detail="Base resume not found")
     resume = _load_base_resume_json(br)
     sf = (
@@ -347,6 +350,7 @@ def export_tailored_docx(
         .first()
     )
     if not sf:
+        print("sf+++++++++++++++++")
         raise HTTPException(
             status_code=404,
             detail="Base resume DOCX not uploaded yet. Use PUT /v1/users/{user_id}/base-resume-docx",
