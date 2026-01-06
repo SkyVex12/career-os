@@ -88,8 +88,8 @@ def build_prompt_compress_jd(jd_text: str) -> str:
 Return ONLY valid JSON.
 
 TASK:
-Compress this Job Description into an ATS_PACKAGE JSON object with:
-- core_hard: list of hard skills/tech/phrases that must be present (20-35 max), something like 
+Compress this Job Description into an JSON object with:
+- core_hard: list of hard skills/tech/phrases that must be present (20-35 max) 
 - core_soft: list of soft skills phrases verbatim from JD (10-20 max)
 - required_phrases: important long phrases (5-15 max)
 

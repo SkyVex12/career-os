@@ -99,8 +99,8 @@ def tailor_rewrite_resume(
             "Summary: 3-4 sentences. Target <= 350 chars; hard cap <= 420 chars.",
             "Bullets: rewrite EVERY bullet. Do not drop bullets and do not add bullets.",
             "Bullets must keep same count and same order as provided. source_index must match.",
-            "Bullets: target <= 150 chars, hard cap <= 170 chars (10pt, max ~3 lines). Past tense. Strong verb first.",
-            "Use JD keywords only when supported by the original bullet/summary content.",
+            "Bullets: target <= 200 chars, hard cap <= 250 chars (10pt, max ~3 lines). Past tense. Strong verb first.",
+            "MUST Use all JD keywords as verbatim in total",
             "Cover letter: if cover_letter.include is true, 180-260 words, professional tone, no fabricated claims, no addresses; otherwise return empty string.",
         ],
         "jd": {

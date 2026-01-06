@@ -461,6 +461,19 @@ export default function ApplicationsPage() {
                         : "-"}
                     </td>
                     <td>
+                      {a.resume_docx_download_url ? (
+                        <a
+                          href={a.resume_docx_download_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          resume
+                        </a>
+                      ) : (
+                        <span className="small muted">—</span>
+                      )}
+                    </td>
+                    <td>
                       {a.url ? (
                         <a href={a.url} target="_blank" rel="noreferrer">
                           open
@@ -707,15 +720,10 @@ export default function ApplicationsPage() {
                             onClick={() =>
                               track("Resume Downloaded", {
                                 appId: a.id,
-                                type: a.resume_pdf_download_url
-                                  ? "pdf"
-                                  : "docx",
+                                type: "docx",
                               })
                             }
-                            href={
-                              a.resume_pdf_download_url ||
-                              a.resume_docx_download_url
-                            }
+                            href={a.resume_docx_download_url}
                             target="_blank"
                             rel="noreferrer"
                           >
