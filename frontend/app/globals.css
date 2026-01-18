@@ -31,7 +31,8 @@ body {
 body {
   margin: 0;
   color: var(--text);
-  background: radial-gradient(
+  background:
+    radial-gradient(
       1200px 600px at 10% 0%,
       rgba(96, 165, 250, 0.22),
       transparent 55%
@@ -47,8 +48,16 @@ body {
       transparent 55%
     ),
     linear-gradient(180deg, var(--bg0), var(--bg1));
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
-    Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Helvetica,
+    Arial,
+    "Apple Color Emoji",
+    "Segoe UI Emoji";
   /* Prevent page-level scroll; the main content area handles scrolling */
   overflow: hidden;
 }
@@ -138,7 +147,9 @@ select {
   border-radius: 14px;
   color: rgba(255, 255, 255, 0.8);
   border: 1px solid transparent;
-  transition: transform 0.12s ease, background 0.12s ease,
+  transition:
+    transform 0.12s ease,
+    background 0.12s ease,
     border-color 0.12s ease;
 }
 .nav a:hover {
@@ -176,7 +187,7 @@ select {
 }
 
 .container {
-  max-width: 1200px;
+  max-width: 1500px;
   margin: 0 auto;
 }
 
@@ -259,7 +270,9 @@ select {
   border-color: rgba(255, 255, 255, 0.18);
   color: rgba(10, 15, 28, 0.98);
   box-shadow: 0 14px 34px rgba(96, 165, 250, 0.22);
-  transition: transform 0.12s ease, filter 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    filter 0.12s ease;
 }
 .pillBtn:hover {
   transform: translateY(-1px);
@@ -326,7 +339,8 @@ option {
   padding: 14px;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: radial-gradient(
+  background:
+    radial-gradient(
       900px 240px at 0% 0%,
       rgba(96, 165, 250, 0.16),
       transparent 55%
@@ -393,7 +407,9 @@ textarea:focus {
     rgba(167, 139, 250, 0.95)
   );
   box-shadow: 0 14px 34px rgba(96, 165, 250, 0.22);
-  transition: transform 0.12s ease, filter 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    filter 0.12s ease;
 }
 .btn:hover {
   transform: translateY(-1px);
@@ -494,7 +510,8 @@ textarea:focus {
   width: 520px;
   border-radius: 26px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: radial-gradient(
+  background:
+    radial-gradient(
       800px 240px at 0% 0%,
       rgba(96, 165, 250, 0.2),
       transparent 60%
@@ -578,7 +595,9 @@ textarea:focus {
   );
   color: rgba(10, 15, 28, 0.98);
   box-shadow: 0 18px 45px rgba(96, 165, 250, 0.22);
-  transition: transform 0.12s ease, filter 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    filter 0.12s ease;
 }
 .authBtn:hover {
   transform: translateY(-1px);
@@ -859,7 +878,9 @@ textarea:focus {
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.86);
   cursor: pointer;
-  transition: transform 0.12s ease, border-color 0.12s ease,
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease,
     background 0.12s ease;
 }
 .chatThread:hover {
@@ -1077,7 +1098,9 @@ textarea:focus {
   padding: 9px 12px;
   cursor: pointer;
   font-weight: 800;
-  transition: transform 0.12s ease, background 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    background 0.12s ease;
 }
 .btn:hover {
   background: rgba(255, 255, 255, 0.08);
@@ -1164,7 +1187,9 @@ textarea:focus {
   cursor: pointer;
   opacity: 0;
   transform: translateY(-1px);
-  transition: opacity 0.12s ease, background 0.12s ease;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease;
 }
 
 .chatThreadWrap:hover .chatThreadDelete {
@@ -1175,38 +1200,41 @@ textarea:focus {
   background: rgba(255, 255, 255, 0.08);
 }
 
-
 /* --- Email updates page helpers --- */
-.formGrid{
-  display:grid;
+.formGrid {
+  display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
   margin-top: 8px;
 }
-.formGrid .full{ grid-column: 1 / -1; }
+.formGrid .full {
+  grid-column: 1 / -1;
+}
 
-.hint{
+.hint {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
 }
 
-.mono{
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+.mono {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
   font-size: 12px;
 }
 
-.pillOk{
+.pillOk {
   border-color: rgba(52, 211, 153, 0.35);
   background: rgba(52, 211, 153, 0.12);
   color: rgba(209, 250, 229, 0.95);
 }
-.pillWarn{
+.pillWarn {
   border-color: rgba(251, 191, 36, 0.35);
   background: rgba(251, 191, 36, 0.12);
   color: rgba(254, 243, 199, 0.95);
 }
-.pillDanger{
+.pillDanger {
   border-color: rgba(248, 113, 113, 0.35);
   background: rgba(248, 113, 113, 0.12);
   color: rgba(254, 226, 226, 0.95);
