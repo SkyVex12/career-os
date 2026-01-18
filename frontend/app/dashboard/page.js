@@ -15,6 +15,8 @@ import {
   Pie,
   Cell,
   Legend,
+  BarChart,
+  Bar,
 } from "recharts";
 import { useScope } from "../components/ClientShell";
 
@@ -42,6 +44,10 @@ function todayLocalISODate() {
   return localMidnight.toISOString().slice(0, 10);
 }
 
+function pct1(x) {
+  return `${Math.round((x || 0) * 1000) / 10}%`;
+}
+
 export default function DashboardPage() {
   // NOTE: don't read localStorage during the initial render ...
   // can cause hydration mismatches. Read it after mount instead.
@@ -63,6 +69,10 @@ export default function DashboardPage() {
 
   const [data, setData] = useState(null);
   const [status, setStatus] = useState("");
+
+  // ✅ NEW: source site controls
+  const [sourceMetric, setSourceMetric] = useState("interview_rate"); // or "success_rate"
+  const [minN, setMinN] = useState(5);
 
   useEffect(() => {
     const sync = () => {
@@ -114,6 +124,28 @@ export default function DashboardPage() {
   const series = data?.series || data?.series_daily || [];
   const unit = data?.series_unit || "day"; // fallback for old API
   const xKey = unit === "hour" ? "time" : "day";
+
+  // ✅ NEW: Source site computed rows
+  const sourceRows = useMemo(() => {
+    const rows = data?.source_site_stats || [];
+    const filtered = rows.filter((r) => (r.total || 0) >= minN);
+
+    filtered.sort(
+      (a, b) =>
+        (b[sourceMetric] || 0) - (a[sourceMetric] || 0) ||
+        (b.total || 0) - (a.total || 0),
+    );
+
+    return filtered;
+  }, [data, sourceMetric, minN]);
+
+  const sourceBars = useMemo(() => {
+    return (sourceRows || []).slice(0, 8).map((r) => ({
+      source_site: r.source_site,
+      rate: Math.round((r[sourceMetric] || 0) * 1000) / 10, // percent with 1 decimal
+      total: r.total,
+    }));
+  }, [sourceRows, sourceMetric]);
 
   return (
     <main className="container">
@@ -336,6 +368,129 @@ export default function DashboardPage() {
             conversion to <b>interview</b>.
           </div>
         </div>
+      </div>
+
+      {/* ✅ NEW: Source site performance */}
+      <div className="card cardPad" style={{ marginTop: 12 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            flexWrap: "wrap",
+            marginBottom: 10,
+          }}
+        >
+          <div style={{ marginRight: "auto" }}>
+            <div className="kpiTitle">Best source sites</div>
+            <div className="small">
+              Conversion by <code>source_site</code> (same window)
+            </div>
+          </div>
+
+          <select
+            className="select"
+            value={sourceMetric}
+            onChange={(e) => setSourceMetric(e.target.value)}
+          >
+            <option value="interview_rate">Interview rate</option>
+            <option value="success_rate">Offer rate</option>
+          </select>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span className="small">Min n:</span>
+            <input
+              className="select"
+              type="number"
+              min={0}
+              value={minN}
+              onChange={(e) => setMinN(Number(e.target.value))}
+              style={{ width: 90 }}
+            />
+          </div>
+        </div>
+
+        {!sourceRows || sourceRows.length === 0 ? (
+          <div className="small" style={{ opacity: 0.8 }}>
+            No source-site data yet (or all sources are below min n).
+          </div>
+        ) : (
+          <div className="grid2">
+            {/* Chart */}
+            <div style={{ width: "100%", height: 260 }}>
+              <ResponsiveContainer>
+                <BarChart data={sourceBars}>
+                  <CartesianGrid stroke="rgba(255,255,255,.10)" />
+                  <XAxis
+                    dataKey="source_site"
+                    tick={{ fill: "rgba(255,255,255,.55)", fontSize: 11 }}
+                  />
+                  <YAxis
+                    tick={{ fill: "rgba(255,255,255,.55)", fontSize: 11 }}
+                    allowDecimals={false}
+                    unit="%"
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "rgba(15,23,42,.9)",
+                      border: "1px solid rgba(255,255,255,.12)",
+                      borderRadius: 12,
+                      color: "white",
+                    }}
+                    formatter={(value) => [
+                      `${value}%`,
+                      sourceMetric === "interview_rate"
+                        ? "Interview rate"
+                        : "Offer rate",
+                    ]}
+                    labelFormatter={(label) => `Source: ${label}`}
+                  />
+                  <Bar dataKey="rate" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Table */}
+            <div style={{ overflowX: "auto" }}>
+              <table className="table" style={{ width: "100%" }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left" }}>Source</th>
+                    <th style={{ textAlign: "right" }}>Total</th>
+                    <th style={{ textAlign: "right" }}>Interview</th>
+                    <th style={{ textAlign: "right" }}>Offer</th>
+                    <th style={{ textAlign: "right" }}>
+                      {sourceMetric === "interview_rate"
+                        ? "Interview rate"
+                        : "Offer rate"}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sourceRows.slice(0, 20).map((r) => (
+                    <tr key={r.source_site}>
+                      <td style={{ textAlign: "left" }}>{r.source_site}</td>
+                      <td style={{ textAlign: "right" }}>{r.total}</td>
+                      <td style={{ textAlign: "right" }}>
+                        {r.interview_count}
+                      </td>
+                      <td style={{ textAlign: "right" }}>{r.offer_count}</td>
+                      <td style={{ textAlign: "right" }}>
+                        {pct1(r[sourceMetric])}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="small" style={{ marginTop: 8, opacity: 0.8 }}>
+                Showing top 20 by{" "}
+                {sourceMetric === "interview_rate" ? "interview" : "offer"} rate
+                (min n {minN})
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );

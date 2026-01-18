@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, func, text
+from sqlalchemy import or_, func, text, case
 from datetime import datetime, timedelta, timezone, date as date_type
 from pydantic import BaseModel, Field
 
@@ -252,6 +252,72 @@ def applications_stats(
     rejected = int(stage_counts.get("rejected", 0))
     applied = int(stage_counts.get("applied", 0))
 
+    # ==========================================================
+    # ✅ NEW: Per-source-site success stats (window-scoped)
+    # ==========================================================
+    stage_l = func.lower(Application.stage)
+
+    applied_flag = case((stage_l == "applied", 1), else_=0)
+    interview_flag = case((stage_l == "interview", 1), else_=0)
+    offer_flag = case((stage_l == "offer", 1), else_=0)
+    rejected_flag = case((stage_l == "rejected", 1), else_=0)
+
+    # reached interview == interview OR offer (you can expand later)
+    reached_interview_flag = case(
+        (stage_l.in_(["interview", "offer"]), 1),
+        else_=0,
+    )
+
+    # success == offer
+    success_flag = offer_flag
+
+    # normalize source_site
+    source_expr = func.coalesce(
+        func.nullif(func.trim(Application.source_site), ""),
+        "unknown",
+    )
+    source_expr = func.lower(source_expr)
+
+    source_rows = (
+        window_q.with_entities(
+            source_expr.label("source_site"),
+            func.count(Application.id).label("total"),
+            func.sum(applied_flag).label("applied"),
+            func.sum(interview_flag).label("interview"),
+            func.sum(offer_flag).label("offer"),
+            func.sum(rejected_flag).label("rejected"),
+            func.sum(reached_interview_flag).label("reached_interview"),
+            func.sum(success_flag).label("success"),
+        )
+        .group_by(source_expr)
+        .order_by(func.count(Application.id).desc())
+        .all()
+    )
+
+    source_site_stats = []
+    for r in source_rows:
+        total_s = int(r.total or 0)
+        reached_interview = int(r.reached_interview or 0)
+        success = int(r.success or 0)
+
+        source_site_stats.append(
+            {
+                "source_site": r.source_site,
+                "total": total_s,
+                "applied_count": int(r.applied or 0),
+                "interview_count": int(r.interview or 0),
+                "offer_count": int(r.offer or 0),
+                "rejected_count": int(r.rejected or 0),
+                "interview_rate": reached_interview / max(1, total_s),
+                "success_rate": success / max(1, total_s),
+            }
+        )
+
+    source_site_stats.sort(
+        key=lambda x: (x["interview_rate"], x["total"]),
+        reverse=True,
+    )
+
     return {
         "total": total,
         "stage_counts": stage_counts,
@@ -265,6 +331,8 @@ def applications_stats(
         "interview_count": interviews,
         "offer_count": offers,
         "rejected_count": rejected,
+        # ✅ NEW
+        "source_site_stats": source_site_stats,
     }
 
 
