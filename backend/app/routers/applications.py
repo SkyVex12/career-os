@@ -203,6 +203,7 @@ def list_applications(
     stage: Optional[str] = None,
     user_id: Optional[str] = None,
     q: Optional[str] = None,
+    dedupe: bool = Query(False),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
 ):
@@ -215,7 +216,7 @@ def list_applications(
         query = query.join(AdminUser, AdminUser.user_id == Application.user_id).filter(
             AdminUser.admin_id == principal.id
         )
-        if user_id and user_id != "__all__":
+        if user_id and user_id != "u1":
             query = query.filter(Application.user_id == user_id)
 
     if stage:
@@ -233,15 +234,109 @@ def list_applications(
             )
         )
 
-    total = query.count()
-    print(f"Total applications found: {total}")
-    items = (
-        query.order_by(Application.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
-    app_ids = [a.id for a in items]
+    if not dedupe:
+        total = query.count()
+        items = (
+            query.order_by(Application.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+    else:
+        # 1) aggregate user_ids per (company, role, url)
+        user_ids_expr = func.string_agg(func.distinct(Application.user_id), ", ")
+
+        agg = (
+            query.with_entities(
+                Application.company.label("company"),
+                Application.role.label("role"),
+                Application.url.label("url"),
+                user_ids_expr.label("user_ids"),
+            )
+            .group_by(Application.company, Application.role, Application.url)
+            .subquery("agg")
+        )
+
+        # 2) rank rows per (company, role, url) to pick 1 row (newest)
+        rn = (
+            func.row_number()
+            .over(
+                partition_by=(Application.company, Application.role, Application.url),
+                order_by=(
+                    Application.updated_at.desc(),
+                    Application.created_at.desc(),
+                    Application.id.desc(),
+                ),
+            )
+            .label("rn")
+        )
+
+        ranked = query.with_entities(
+            Application.id.label("id"),
+            Application.user_id.label("user_id"),
+            Application.admin_id.label("admin_id"),
+            Application.company.label("company"),
+            Application.role.label("role"),
+            Application.url.label("url"),
+            Application.source_site.label("source_site"),
+            Application.stage.label("stage"),
+            Application.created_at.label("created_at"),
+            Application.updated_at.label("updated_at"),
+            rn,
+        ).subquery("ranked")
+
+        # IMPORTANT: select columns explicitly (ranked.c.*), not `ranked` as an entity
+        final_q = (
+            db.query(
+                ranked.c.id,
+                ranked.c.user_id,
+                ranked.c.admin_id,
+                ranked.c.company,
+                ranked.c.role,
+                ranked.c.url,
+                ranked.c.source_site,
+                ranked.c.stage,
+                ranked.c.created_at,
+                ranked.c.updated_at,
+                agg.c.user_ids.label("user_ids"),
+            )
+            .join(
+                agg,
+                (agg.c.company == ranked.c.company)
+                & (agg.c.role == ranked.c.role)
+                & (agg.c.url == ranked.c.url),
+            )
+            .filter(ranked.c.rn == 1)
+        )
+
+        total = db.query(func.count()).select_from(final_q.subquery()).scalar() or 0
+
+        rows = (
+            final_q.order_by(ranked.c.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+
+        # Now rows are plain tuples with known positions/labels
+        items = [
+            {
+                "id": r.id,
+                "user_id": r.user_id,
+                "admin_id": r.admin_id,
+                "company": r.company,
+                "role": r.role,
+                "stage": r.stage,
+                "url": r.url,
+                "source_site": r.source_site,
+                "created_at": r.created_at,
+                "updated_at": r.updated_at,
+                "user_ids": r.user_ids,
+            }
+            for r in rows
+        ]
+
+    app_ids = [a.id for a in items] if not dedupe else [x["id"] for x in items]
     file_map = {}  # (app_id, kind) -> StoredFile
     if app_ids:
         rows = (
@@ -258,7 +353,7 @@ def list_applications(
             if key not in file_map:
                 file_map[key] = f
 
-    def to_dict(a: Application):
+    def to_dict(a: Application, user_ids: str | None = None):
         docx = file_map.get((a.id, "resume_docx"))
         pdf = file_map.get((a.id, "resume_pdf"))
         return {
@@ -271,6 +366,8 @@ def list_applications(
             "url": a.url,
             "source_site": a.source_site,
             "created_at": a.created_at.isoformat() if a.created_at else None,
+            "updated_at": a.updated_at.isoformat() if a.updated_at else None,
+            "user_ids": user_ids,  # <-- NEW (string)
             "resume_docx_file_id": docx.id if docx else None,
             "resume_pdf_file_id": pdf.id if pdf else None,
             "resume_version_id": (
@@ -282,8 +379,37 @@ def list_applications(
             "resume_pdf_download_url": pdf.path if pdf else None,
         }
 
+    if not dedupe:
+        out_items = [to_dict(a) for a in items]
+    else:
+        # Reuse the same resume-file enrichment logic by adapting to_dict OR inline:
+        out_items = []
+        for x in items:
+            docx = file_map.get((x["id"], "resume_docx"))
+            pdf = file_map.get((x["id"], "resume_pdf"))
+            out_items.append(
+                {
+                    **x,
+                    "created_at": (
+                        x["created_at"].isoformat() if x["created_at"] else None
+                    ),
+                    "updated_at": (
+                        x["updated_at"].isoformat() if x["updated_at"] else None
+                    ),
+                    "resume_docx_file_id": docx.id if docx else None,
+                    "resume_pdf_file_id": pdf.id if pdf else None,
+                    "resume_version_id": (
+                        pdf.resume_version_id
+                        if pdf and getattr(pdf, "resume_version_id", None)
+                        else (docx.resume_version_id if docx else None)
+                    ),
+                    "resume_docx_download_url": docx.path if docx else None,
+                    "resume_pdf_download_url": pdf.path if pdf else None,
+                }
+            )
+
     return {
-        "items": [to_dict(a) for a in items],
+        "items": out_items,
         "page": page,
         "page_size": page_size,
         "total": total,

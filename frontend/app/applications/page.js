@@ -45,6 +45,13 @@ export default function ApplicationsPage() {
 
   // user scope
   const [userId, setUserId] = useState("u1");
+  const [users, setUsers] = useState([]);
+  const [dedupe, setDedupe] = useState(true);
+
+  const allUserIds = useMemo(
+    () => new Set(users.map((u) => String(u.id))),
+    [users],
+  );
 
   // debounce + request canceling (prevents out-of-order updates)
   const reqSeq = useRef(0);
@@ -53,9 +60,26 @@ export default function ApplicationsPage() {
     const read = () => {
       try {
         setUserId(localStorage.getItem("careeros_user_id") || "u1");
+        if (localStorage.getItem("careeros_user_id")) {
+          setDedupe(false);
+        } else {
+          setDedupe(true);
+        }
       } catch {}
     };
-    read();
+
+    const loadUsers = async () => {
+      try {
+        read();
+        const u = await apiFetch("/v1/users");
+        const items = Array.isArray(u) ? u : u.items || u.users || [];
+        console.log("Loaded users for scope:", items);
+        setUsers(items);
+      } catch (e) {
+        console.error("Failed to load users:", e);
+      }
+    };
+    loadUsers();
 
     const onScope = () => read();
     const onStorage = (e) => {
@@ -72,6 +96,7 @@ export default function ApplicationsPage() {
 
   function buildCommonParams(extra = {}) {
     const params = new URLSearchParams({
+      dedupe: dedupe,
       user_id: userId,
       ...(q.trim() ? { q: q.trim() } : {}),
       ...(dateFrom ? { date_from: dateFrom } : {}),
@@ -205,6 +230,27 @@ export default function ApplicationsPage() {
       if (found) return found;
     }
     return null;
+  }
+
+  function isMissingUsers(item) {
+    if (!item.user_ids || allUserIds.size === 0) return false;
+
+    const itemUserIds = parseUserIds(item.user_ids);
+
+    for (const uid of allUserIds) {
+      if (!itemUserIds.has(uid)) return true; // ❗ missing user
+    }
+    return false;
+  }
+
+  function parseUserIds(userIds) {
+    if (!userIds) return new Set();
+    return new Set(
+      userIds
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
   }
 
   async function updateStage(idRaw, stage) {
@@ -683,103 +729,112 @@ export default function ApplicationsPage() {
                     transition: "background 120ms ease",
                   }}
                 >
-                  {col.items.map((a) => (
-                    <div
-                      key={a.id}
-                      draggable
-                      onDragStart={(e) => onDragStart(e, a.id)}
-                      onClick={() => getJobDescription(a.id)}
-                      style={{
-                        padding: 12,
-                        borderRadius: 14,
-                        border: "1px solid rgba(255,255,255,.10)",
-                        background: "rgba(2,6,23,.35)",
-                        marginBottom: 10,
-                        cursor: "grab",
-                      }}
-                    >
+                  {col.items.map((a) => {
+                    const highlight = isMissingUsers(a);
+                    return (
                       <div
+                        key={a.id}
+                        draggable
+                        onDragStart={(e) => onDragStart(e, a.id)}
+                        onClick={() => getJobDescription(a.id)}
                         style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          gap: 10,
-                          alignItems: "flex-start",
+                          padding: 12,
+                          borderRadius: 14,
+                          border: highlight
+                            ? "2px solid #f59e0b" // amber
+                            : "1px solid rgba(255,255,255,.10)",
+                          background: highlight
+                            ? "rgba(245,158,11,.08)"
+                            : "rgba(2,6,23,.35)",
+                          marginBottom: 10,
+                          cursor: "grab",
                         }}
                       >
-                        <div style={{ minWidth: 0 }}>
-                          <div
-                            style={{
-                              fontWeight: 800,
-                              lineHeight: 1.2,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
-                            title={a.company || ""}
-                          >
-                            {a.company}
-                          </div>
-                          <div
-                            className="small muted"
-                            style={{
-                              marginTop: 4,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
-                            title={a.role || ""}
-                          >
-                            {a.role}
-                          </div>
-                        </div>
-                        <StageBadge stage={a.stage} />
-                      </div>
-
-                      <div
-                        className="small"
-                        style={{
-                          marginTop: 10,
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          gap: 10,
-                        }}
-                      >
-                        <span className="muted">
-                          {a.created_at
-                            ? new Date(a.created_at).toLocaleDateString()
-                            : "—"}
-                        </span>
-                        <div style={{ display: "flex", gap: 10, fontSize: 14 }}>
-                          {a.resume_pdf_download_url ||
-                          a.resume_docx_download_url ? (
-                            <a
-                              onClick={() =>
-                                track("Resume Downloaded", {
-                                  appId: a.id,
-                                  type: "docx",
-                                })
-                              }
-                              href={a.resume_docx_download_url}
-                              target="_blank"
-                              rel="noreferrer"
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 10,
+                            alignItems: "flex-start",
+                          }}
+                        >
+                          <div style={{ minWidth: 0 }}>
+                            <div
+                              style={{
+                                fontWeight: 800,
+                                lineHeight: 1.2,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                              title={a.company || ""}
                             >
-                              Resume
-                            </a>
-                          ) : (
-                            <span className="muted">—</span>
-                          )}
-                          {a.url ? (
-                            <a href={a.url} target="_blank" rel="noreferrer">
-                              Open
-                            </a>
-                          ) : (
-                            <span className="muted">—</span>
-                          )}
+                              {a.company}
+                            </div>
+                            <div
+                              className="small muted"
+                              style={{
+                                marginTop: 4,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                              title={a.role || ""}
+                            >
+                              {a.role}
+                            </div>
+                          </div>
+                          <StageBadge stage={a.stage} />
+                        </div>
+
+                        <div
+                          className="small"
+                          style={{
+                            marginTop: 10,
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 10,
+                          }}
+                        >
+                          <span className="muted">
+                            {a.created_at
+                              ? new Date(a.created_at).toLocaleDateString()
+                              : "—"}
+                          </span>
+                          <div
+                            style={{ display: "flex", gap: 10, fontSize: 14 }}
+                          >
+                            {a.resume_pdf_download_url ||
+                            a.resume_docx_download_url ? (
+                              <a
+                                onClick={() =>
+                                  track("Resume Downloaded", {
+                                    appId: a.id,
+                                    type: "docx",
+                                  })
+                                }
+                                href={a.resume_docx_download_url}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Resume
+                              </a>
+                            ) : (
+                              <span className="muted">—</span>
+                            )}
+                            {a.url ? (
+                              <a href={a.url} target="_blank" rel="noreferrer">
+                                Open
+                              </a>
+                            ) : (
+                              <span className="muted">—</span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {!col.items.length ? (
                     <div
