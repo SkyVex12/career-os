@@ -5,6 +5,7 @@ import { apiFetch } from "../lib/api";
 import { track } from "../lib/analytics";
 import TopbarClient from "../components/TopbarClient";
 import StageBadge from "../components/StageBadge";
+import { DescriptionModal } from "./description_modal";
 
 const STAGES = ["applied", "interview", "offer", "rejected"];
 
@@ -15,7 +16,6 @@ function stageNormalize(s) {
 
 export default function ApplicationsPage() {
   const [view, setView] = useState("kanban"); // kanban | list
-
   // list state
   const [listItems, setListItems] = useState([]);
   const [listTotal, setListTotal] = useState(0);
@@ -29,6 +29,10 @@ export default function ApplicationsPage() {
   const [dateTo, setDateTo] = useState("");
 
   const [status, setStatus] = useState("");
+  const [jdOpen, setJdOpen] = useState(false);
+  const [jdData, setJdData] = useState(null);
+  const [jdLoading, setJdLoading] = useState(false);
+  const [jdError, setJdError] = useState("");
 
   // kanban state
   const [kb, setKb] = useState(() => ({
@@ -94,7 +98,7 @@ export default function ApplicationsPage() {
         (data.items || []).map((x) => ({
           ...x,
           stage: stageNormalize(x.stage),
-        }))
+        })),
       );
       setListTotal(data.total || 0);
       setStatus("");
@@ -180,9 +184,18 @@ export default function ApplicationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listPage, listPageSize]);
 
+  useEffect(() => {
+    if (!jdOpen) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setJdOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [jdOpen]);
+
   const listPageCount = useMemo(
     () => Math.max(1, Math.ceil(listTotal / listPageSize)),
-    [listTotal, listPageSize]
+    [listTotal, listPageSize],
   );
 
   function findMovedFromBoard(prevKb, id) {
@@ -200,7 +213,7 @@ export default function ApplicationsPage() {
 
     // optimistic update across list + kanban
     setListItems((prev) =>
-      prev.map((x) => (String(x.id) === id ? { ...x, stage: nextStage } : x))
+      prev.map((x) => (String(x.id) === id ? { ...x, stage: nextStage } : x)),
     );
 
     setKb((prev) => {
@@ -270,6 +283,28 @@ export default function ApplicationsPage() {
     </button>
   );
 
+  const getJobDescription = async (id) => {
+    try {
+      setStatus("Loading job description…");
+      setJdOpen(true);
+      setJdLoading(true);
+      setJdError("");
+      setJdData(null);
+
+      const params = buildCommonParams({
+        application_id: String(id),
+      });
+      const { job_description } = await apiFetch(
+        `/v1/jd/?${params.toString()}`,
+      );
+      console.log("JD data:", job_description);
+      setJdData(job_description || "No job description available.");
+      setStatus("");
+      setJdLoading(false);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
   return (
     <main className="container">
       <TopbarClient
@@ -653,6 +688,7 @@ export default function ApplicationsPage() {
                       key={a.id}
                       draggable
                       onDragStart={(e) => onDragStart(e, a.id)}
+                      onClick={() => getJobDescription(a.id)}
                       style={{
                         padding: 12,
                         borderRadius: 14,
@@ -714,32 +750,33 @@ export default function ApplicationsPage() {
                             ? new Date(a.created_at).toLocaleDateString()
                             : "—"}
                         </span>
-                        {a.resume_pdf_download_url ||
-                        a.resume_docx_download_url ? (
-                          <a
-                            onClick={() =>
-                              track("Resume Downloaded", {
-                                appId: a.id,
-                                type: "docx",
-                              })
-                            }
-                            href={a.resume_docx_download_url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            resume
-                          </a>
-                        ) : (
-                          <span className="muted">—</span>
-                        )}
-
-                        {a.url ? (
-                          <a href={a.url} target="_blank" rel="noreferrer">
-                            open
-                          </a>
-                        ) : (
-                          <span className="muted">—</span>
-                        )}
+                        <div style={{ display: "flex", gap: 10, fontSize: 14 }}>
+                          {a.resume_pdf_download_url ||
+                          a.resume_docx_download_url ? (
+                            <a
+                              onClick={() =>
+                                track("Resume Downloaded", {
+                                  appId: a.id,
+                                  type: "docx",
+                                })
+                              }
+                              href={a.resume_docx_download_url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Resume
+                            </a>
+                          ) : (
+                            <span className="muted">—</span>
+                          )}
+                          {a.url ? (
+                            <a href={a.url} target="_blank" rel="noreferrer">
+                              Open
+                            </a>
+                          ) : (
+                            <span className="muted">—</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -773,6 +810,13 @@ export default function ApplicationsPage() {
           }
         }
       `}</style>
+      <DescriptionModal
+        jdOpen={jdOpen}
+        jdData={jdData}
+        jdLoading={jdLoading}
+        jdError={jdError}
+        onClose={() => setJdOpen(false)}
+      />
     </main>
   );
 }

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..auth import Principal, get_db, get_principal
-from ..models import AdminUser, JDKeyInfo
+from ..models import AdminUser, JDKeyInfo, JobDescription
 from ..ai import call_openai_json, build_prompt_compress_jd
 
 router = APIRouter(prefix="/v1", tags=["jd"])
@@ -139,3 +139,21 @@ def get_or_create_jd_keys(
         "source_url": row.source_url,
         "keys": keys,
     }
+
+
+@router.get("/jd/")
+def get_jd(
+    db: Session = Depends(get_db),
+    user_id: Optional[str] = None,
+    application_id: Optional[str] = None,
+):
+    try:
+        query = db.query(JobDescription)
+        if user_id:
+            query = query.filter(JobDescription.user_id == user_id)
+        if application_id:
+            query = query.filter(JobDescription.application_id == application_id)
+        jd = query.first()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"job_description": jd}

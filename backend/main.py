@@ -18,7 +18,6 @@ from app.routers import (
     gate,
 )
 
-
 app = FastAPI(title="CareerOS API")
 
 # Dev CORS
@@ -49,6 +48,7 @@ app.include_router(outlook.router)
 app.include_router(email_updates.router)
 app.include_router(gate.router)
 
+
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
@@ -59,8 +59,10 @@ def readyz():
     # Basic readiness: DB connection works
     try:
         from app.db import SessionLocal
+
         db = SessionLocal()
         from sqlalchemy import text
+
         db.execute(text("SELECT 1"))
         db.close()
         return {"ok": True}
