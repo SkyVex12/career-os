@@ -21,8 +21,8 @@ class UserOut(BaseModel):
     id: str
     email: Optional[str] = None
     name: Optional[str] = None
-    firstname: Optional[str] = None
-    lastname: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     dob: Optional[str] = None
 
     class Config:
@@ -42,6 +42,7 @@ def list_users(
             .order_by(User.created_at.desc())
             .all()
         )
+
         return {"items": [UserOut.model_validate(u).model_dump() for u in rows]}
     else:
         u = db.query(User).filter(User.id == principal.id).first()
@@ -197,7 +198,9 @@ async def put_base_resume_docx(
 
     db.commit()
     exp_count = len(resume_json.get("experiences") or [])
-    bullets_count = sum(len((e.get("bullets") or [])) for e in (resume_json.get("experiences") or []))
+    bullets_count = sum(
+        len((e.get("bullets") or [])) for e in (resume_json.get("experiences") or [])
+    )
     return {
         "ok": True,
         "user_id": user_id,

@@ -48,10 +48,38 @@ export default function ApplicationsPage() {
   const [users, setUsers] = useState([]);
   const [dedupe, setDedupe] = useState(true);
 
-  const allUserIds = useMemo(
-    () => new Set(users.map((u) => String(u.id))),
-    [users],
-  );
+  function parseUserIds(userIds) {
+    if (!userIds) return new Set();
+    return new Set(
+      String(userIds)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
+  }
+
+  const usersById = useMemo(() => {
+    const m = new Map();
+    for (const u of users) m.set(String(u.id), u);
+    return m;
+  }, [users]);
+
+  const allUserIds = useMemo(() => users.map((u) => String(u.id)), [users]);
+
+  function missingUserNamesForItem(item) {
+    if (!item?.user_ids || allUserIds.length === 0) return [];
+
+    const present = parseUserIds(item.user_ids);
+
+    // Only names of users that are NOT included in item.user_ids
+    const missing = [];
+    for (const uid of allUserIds) {
+      if (!present.has(uid)) {
+        missing.push(usersById.get(uid)?.first_name || uid);
+      }
+    }
+    return missing;
+  }
 
   // debounce + request canceling (prevents out-of-order updates)
   const reqSeq = useRef(0);
@@ -73,7 +101,6 @@ export default function ApplicationsPage() {
         read();
         const u = await apiFetch("/v1/users");
         const items = Array.isArray(u) ? u : u.items || u.users || [];
-        console.log("Loaded users for scope:", items);
         setUsers(items);
       } catch (e) {
         console.error("Failed to load users:", e);
@@ -232,27 +259,6 @@ export default function ApplicationsPage() {
     return null;
   }
 
-  function isMissingUsers(item) {
-    if (!item.user_ids || allUserIds.size === 0) return false;
-
-    const itemUserIds = parseUserIds(item.user_ids);
-
-    for (const uid of allUserIds) {
-      if (!itemUserIds.has(uid)) return true; // ❗ missing user
-    }
-    return false;
-  }
-
-  function parseUserIds(userIds) {
-    if (!userIds) return new Set();
-    return new Set(
-      userIds
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-    );
-  }
-
   async function updateStage(idRaw, stage) {
     const id = String(idRaw);
     const nextStage = stageNormalize(stage);
@@ -343,7 +349,6 @@ export default function ApplicationsPage() {
       const { job_description } = await apiFetch(
         `/v1/jd/?${params.toString()}`,
       );
-      console.log("JD data:", job_description);
       setJdData(job_description || "No job description available.");
       setStatus("");
       setJdLoading(false);
@@ -730,7 +735,9 @@ export default function ApplicationsPage() {
                   }}
                 >
                   {col.items.map((a) => {
-                    const highlight = isMissingUsers(a);
+                    const missingNames = missingUserNamesForItem(a);
+                    const highlight = missingNames.length > 0;
+
                     return (
                       <div
                         key={a.id}
@@ -750,6 +757,14 @@ export default function ApplicationsPage() {
                           cursor: "grab",
                         }}
                       >
+                        {highlight ? (
+                          <div className="medium">
+                            <span className="muted">Missing: </span>
+                            <span style={{ fontWeight: 700 }}>
+                              {missingNames.join(", ")}
+                            </span>
+                          </div>
+                        ) : null}
                         <div
                           style={{
                             display: "flex",

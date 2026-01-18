@@ -207,7 +207,30 @@ def list_applications(
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
 ):
-    query = db.query(Application)
+    dialect = db.get_bind().dialect.name
+
+    if dialect == "postgresql":
+        user_ids_expr = func.string_agg(func.distinct(Application.user_id), ", ")
+    else:
+        user_ids_expr = func.group_concat(func.distinct(Application.user_id), ", ")
+
+    user_ids_subq = (
+        db.query(
+            Application.company.label("company"),
+            Application.role.label("role"),
+            Application.url.label("url"),
+            user_ids_expr.label("user_ids"),
+        )
+        .group_by(Application.company, Application.role, Application.url)
+        .subquery("user_ids_agg")
+    )
+
+    query = db.query(Application, user_ids_subq.c.user_ids).join(
+        user_ids_subq,
+        (user_ids_subq.c.company == Application.company)
+        & (user_ids_subq.c.role == Application.role)
+        & (user_ids_subq.c.url == Application.url),
+    )
 
     if principal.type == "user":
         query = query.filter(Application.user_id == principal.id)
@@ -336,7 +359,11 @@ def list_applications(
             for r in rows
         ]
 
-    app_ids = [a.id for a in items] if not dedupe else [x["id"] for x in items]
+    app_ids = (
+        [app.id for (app, user_ids) in items]
+        if not dedupe
+        else [x["id"] for x in items]
+    )
     file_map = {}  # (app_id, kind) -> StoredFile
     if app_ids:
         rows = (
@@ -380,7 +407,7 @@ def list_applications(
         }
 
     if not dedupe:
-        out_items = [to_dict(a) for a in items]
+        out_items = [to_dict(a, user_ids) for (a, user_ids) in items]
     else:
         # Reuse the same resume-file enrichment logic by adapting to_dict OR inline:
         out_items = []
