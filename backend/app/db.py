@@ -9,7 +9,8 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # DB_PATH = DATA_DIR / "careeros.db"
 # DATABASE_URL = f"sqlite:///{DB_PATH.as_posix()}"
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:pass@localhost/dbname")
+DATABASE_URL = os.environ["DATABASE_URL"]
+
 # engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 engine = create_engine(
     DATABASE_URL,
