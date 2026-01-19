@@ -81,7 +81,7 @@ def mint_token(
             principal_type=principal_type,
             principal_id=principal_id,
             principal_name=principal_name,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(),
         )
     )
     return token
