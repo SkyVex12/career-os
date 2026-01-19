@@ -149,8 +149,7 @@ def get_jd(
 ):
     try:
         query = db.query(JobDescription)
-        if user_id:
-            query = query.filter(JobDescription.user_id == user_id)
+
         if application_id:
             query = query.filter(JobDescription.application_id == application_id)
         jd = query.first()

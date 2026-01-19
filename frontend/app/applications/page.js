@@ -45,6 +45,41 @@ export default function ApplicationsPage() {
 
   // user scope
   const [userId, setUserId] = useState("u1");
+  const [users, setUsers] = useState([]);
+  const [dedupe, setDedupe] = useState(true);
+
+  function parseUserIds(userIds) {
+    if (!userIds) return new Set();
+    return new Set(
+      String(userIds)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
+  }
+
+  const usersById = useMemo(() => {
+    const m = new Map();
+    for (const u of users) m.set(String(u.id), u);
+    return m;
+  }, [users]);
+
+  const allUserIds = useMemo(() => users.map((u) => String(u.id)), [users]);
+
+  function missingUserNamesForItem(item) {
+    if (!item?.user_ids || allUserIds.length === 0) return [];
+
+    const present = parseUserIds(item.user_ids);
+
+    // Only names of users that are NOT included in item.user_ids
+    const missing = [];
+    for (const uid of allUserIds) {
+      if (!present.has(uid)) {
+        missing.push(usersById.get(uid)?.first_name || uid);
+      }
+    }
+    return missing;
+  }
 
   // debounce + request canceling (prevents out-of-order updates)
   const reqSeq = useRef(0);
@@ -53,9 +88,25 @@ export default function ApplicationsPage() {
     const read = () => {
       try {
         setUserId(localStorage.getItem("careeros_user_id") || "u1");
+        if (localStorage.getItem("careeros_user_id")) {
+          setDedupe(false);
+        } else {
+          setDedupe(true);
+        }
       } catch {}
     };
-    read();
+
+    const loadUsers = async () => {
+      try {
+        read();
+        const u = await apiFetch("/v1/users");
+        const items = Array.isArray(u) ? u : u.items || u.users || [];
+        setUsers(items);
+      } catch (e) {
+        console.error("Failed to load users:", e);
+      }
+    };
+    loadUsers();
 
     const onScope = () => read();
     const onStorage = (e) => {
@@ -72,6 +123,7 @@ export default function ApplicationsPage() {
 
   function buildCommonParams(extra = {}) {
     const params = new URLSearchParams({
+      dedupe: dedupe,
       user_id: userId,
       ...(q.trim() ? { q: q.trim() } : {}),
       ...(dateFrom ? { date_from: dateFrom } : {}),
@@ -297,7 +349,6 @@ export default function ApplicationsPage() {
       const { job_description } = await apiFetch(
         `/v1/jd/?${params.toString()}`,
       );
-      console.log("JD data:", job_description);
       setJdData(job_description || "No job description available.");
       setStatus("");
       setJdLoading(false);
@@ -683,103 +734,122 @@ export default function ApplicationsPage() {
                     transition: "background 120ms ease",
                   }}
                 >
-                  {col.items.map((a) => (
-                    <div
-                      key={a.id}
-                      draggable
-                      onDragStart={(e) => onDragStart(e, a.id)}
-                      onClick={() => getJobDescription(a.id)}
-                      style={{
-                        padding: 12,
-                        borderRadius: 14,
-                        border: "1px solid rgba(255,255,255,.10)",
-                        background: "rgba(2,6,23,.35)",
-                        marginBottom: 10,
-                        cursor: "grab",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          gap: 10,
-                          alignItems: "flex-start",
-                        }}
-                      >
-                        <div style={{ minWidth: 0 }}>
-                          <div
-                            style={{
-                              fontWeight: 800,
-                              lineHeight: 1.2,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
-                            title={a.company || ""}
-                          >
-                            {a.company}
-                          </div>
-                          <div
-                            className="small muted"
-                            style={{
-                              marginTop: 4,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
-                            title={a.role || ""}
-                          >
-                            {a.role}
-                          </div>
-                        </div>
-                        <StageBadge stage={a.stage} />
-                      </div>
+                  {col.items.map((a) => {
+                    const missingNames = missingUserNamesForItem(a);
+                    const highlight = missingNames.length > 0;
 
+                    return (
                       <div
-                        className="small"
+                        key={a.id}
+                        draggable
+                        onDragStart={(e) => onDragStart(e, a.id)}
                         style={{
-                          marginTop: 10,
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          gap: 10,
+                          padding: 12,
+                          borderRadius: 14,
+                          border: highlight
+                            ? "2px solid #f59e0b" // amber
+                            : "1px solid rgba(255,255,255,.10)",
+                          background: highlight
+                            ? "rgba(245,158,11,.08)"
+                            : "rgba(2,6,23,.35)",
+                          marginBottom: 10,
+                          cursor: "grab",
                         }}
                       >
-                        <span className="muted">
-                          {a.created_at
-                            ? new Date(a.created_at).toLocaleDateString()
-                            : "—"}
-                        </span>
-                        <div style={{ display: "flex", gap: 10, fontSize: 14 }}>
-                          {a.resume_pdf_download_url ||
-                          a.resume_docx_download_url ? (
-                            <a
-                              onClick={() =>
-                                track("Resume Downloaded", {
-                                  appId: a.id,
-                                  type: "docx",
-                                })
-                              }
-                              href={a.resume_docx_download_url}
-                              target="_blank"
-                              rel="noreferrer"
+                        {highlight ? (
+                          <div className="medium">
+                            <span className="muted">Missing: </span>
+                            <span style={{ fontWeight: 700 }}>
+                              {missingNames.join(", ")}
+                            </span>
+                          </div>
+                        ) : null}
+                        <div
+                          onClick={() => getJobDescription(a.id)}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 10,
+                            alignItems: "flex-start",
+                          }}
+                        >
+                          <div style={{ minWidth: 0 }}>
+                            <div
+                              style={{
+                                fontWeight: 800,
+                                lineHeight: 1.2,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                              title={a.company || ""}
                             >
-                              Resume
-                            </a>
-                          ) : (
-                            <span className="muted">—</span>
-                          )}
-                          {a.url ? (
-                            <a href={a.url} target="_blank" rel="noreferrer">
-                              Open
-                            </a>
-                          ) : (
-                            <span className="muted">—</span>
-                          )}
+                              {a.company}
+                            </div>
+                            <div
+                              className="small muted"
+                              style={{
+                                marginTop: 4,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                              title={a.role || ""}
+                            >
+                              {a.role}
+                            </div>
+                          </div>
+                          <StageBadge stage={a.stage} />
+                        </div>
+
+                        <div
+                          className="small"
+                          style={{
+                            marginTop: 10,
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 10,
+                          }}
+                        >
+                          <span className="muted">
+                            {a.updated_at
+                              ? new Date(a.updated_at).toLocaleDateString()
+                              : "—"}
+                          </span>
+                          <div
+                            style={{ display: "flex", gap: 10, fontSize: 14 }}
+                          >
+                            {a.resume_pdf_download_url ||
+                            a.resume_docx_download_url ? (
+                              <a
+                                onClick={() =>
+                                  track("Resume Downloaded", {
+                                    appId: a.id,
+                                    type: "docx",
+                                  })
+                                }
+                                href={a.resume_docx_download_url}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Resume
+                              </a>
+                            ) : (
+                              <span className="muted">—</span>
+                            )}
+                            {a.url ? (
+                              <a href={a.url} target="_blank" rel="noreferrer">
+                                Open
+                              </a>
+                            ) : (
+                              <span className="muted">—</span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {!col.items.length ? (
                     <div
