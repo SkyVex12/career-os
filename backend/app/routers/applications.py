@@ -113,7 +113,7 @@ def boundary_end_for_day_label(day_label: date_type) -> datetime:
         minute=0,
         second=0,
         microsecond=0,
-        tzinfo=timezone.utc,
+        # tzinfo=timezone.utc,
     )
 
 
@@ -134,7 +134,8 @@ def applications_stats(
         qset = qset.filter(Application.user_id == principal.id)
 
     dialect = db.get_bind().dialect.name
-    now = datetime.now(timezone.utc)
+    # now = datetime.now(timezone.utc)
+    now = datetime.now()
 
     # ---- determine end_boundary (7 PM) ----
     if days == 1 and day is not None:
@@ -158,9 +159,10 @@ def applications_stats(
         ]
 
         if dialect == "postgresql":
-            bucket_expr = func.date_trunc(
-                "hour", func.timezone("UTC", Application.created_at)
-            )
+            # bucket_expr = func.date_trunc(
+            #     "hour", func.timezone("UTC", Application.created_at)
+            # )
+            bucket_expr = func.date_trunc("hour", Application.created_at)
             key_expr = func.to_char(bucket_expr, "YYYY-MM-DD HH24:00")
         else:
             key_expr = func.strftime("%Y-%m-%d %H:00", Application.created_at)
