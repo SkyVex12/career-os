@@ -461,11 +461,12 @@ def get_application(app_id: int, db: Session = Depends(get_db)):
 def update_application(
     app_id: str, payload: ApplicationUpdateIn, db: Session = Depends(get_db)
 ):
-    print(f"Updating application {app_id} to stage {payload.stage}")
     a = db.get(Application, app_id)
     if not a:
         raise HTTPException(404, "Application not found")
     a.stage = payload.stage
+    a.updated_at = datetime.now()
+    print(f"Updating application {app_id} to stage {payload.stage} at {a.updated_at}")
     db.commit()
     db.refresh(a)
     return a

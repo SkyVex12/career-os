@@ -743,7 +743,6 @@ export default function ApplicationsPage() {
                         key={a.id}
                         draggable
                         onDragStart={(e) => onDragStart(e, a.id)}
-                        onClick={() => getJobDescription(a.id)}
                         style={{
                           padding: 12,
                           borderRadius: 14,
@@ -766,6 +765,7 @@ export default function ApplicationsPage() {
                           </div>
                         ) : null}
                         <div
+                          onClick={() => getJobDescription(a.id)}
                           style={{
                             display: "flex",
                             justifyContent: "space-between",
@@ -813,8 +813,8 @@ export default function ApplicationsPage() {
                           }}
                         >
                           <span className="muted">
-                            {a.created_at
-                              ? new Date(a.created_at).toLocaleDateString()
+                            {a.updated_at
+                              ? new Date(a.updated_at).toLocaleDateString()
                               : "—"}
                           </span>
                           <div
