@@ -513,63 +513,87 @@ export default function ApplicationsPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th style={{ width: "22%" }}>Company</th>
+                  <th style={{ width: "10%" }}>Company</th>
+                  <th style={{ width: "20%" }}>Missing</th>
                   <th style={{ width: "26%" }}>Role</th>
-                  <th style={{ width: "14%" }}>Source</th>
-                  <th style={{ width: "16%" }}>Stage</th>
-                  <th style={{ width: "12%" }}>Date</th>
+                  <th style={{ width: "10%" }}>Description</th>
+                  <th style={{ width: "5%" }}>Source</th>
+                  <th style={{ width: "5%" }}>Stage</th>
+                  <th style={{ width: "10%" }}>Date</th>
                   <th style={{ width: "10%" }}>Resume</th>
                   <th style={{ width: "10%" }}>URL</th>
                 </tr>
               </thead>
               <tbody>
-                {listItems.map((a) => (
-                  <tr key={a.id}>
-                    <td style={{ fontWeight: 600 }}>{a.company}</td>
-                    <td>{a.role}</td>
-                    <td className="small">{a.source_site || "-"}</td>
-                    <td>
-                      <select
-                        className="select"
-                        value={stageNormalize(a.stage)}
-                        onChange={(e) => updateStage(a.id, e.target.value)}
+                {listItems.map((a) => {
+                  const missingNames = missingUserNamesForItem(a);
+                  const highlight = missingNames.length > 0;
+                  return (
+                    <tr key={a.id}>
+                      <td style={{ fontWeight: 600 }}>{a.company}</td>
+                      <td>
+                        {highlight ? (
+                          <span style={{ color: "#f7ab55", fontWeight: 600 }}>
+                            {missingNames.join(", ")}
+                          </span>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                      <td>{a.role}</td>
+                      <td
+                        onClick={() => getJobDescription(a.id)}
+                        style={{
+                          cursor: "pointer",
+                          textDecoration: "underline",
+                        }}
                       >
-                        {STAGES.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="small">
-                      {a.created_at
-                        ? new Date(a.created_at).toLocaleDateString()
-                        : "-"}
-                    </td>
-                    <td>
-                      {a.resume_docx_download_url ? (
-                        <a
-                          href={a.resume_docx_download_url}
-                          target="_blank"
-                          rel="noreferrer"
+                        Description
+                      </td>
+                      <td className="small">{a.source_site || "-"}</td>
+                      <td>
+                        <select
+                          className="select"
+                          value={stageNormalize(a.stage)}
+                          onChange={(e) => updateStage(a.id, e.target.value)}
                         >
-                          resume
-                        </a>
-                      ) : (
-                        <span className="small muted">—</span>
-                      )}
-                    </td>
-                    <td>
-                      {a.url ? (
-                        <a href={a.url} target="_blank" rel="noreferrer">
-                          open
-                        </a>
-                      ) : (
-                        <span className="small muted">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                          {STAGES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="small">
+                        {a.created_at
+                          ? new Date(a.created_at).toLocaleDateString()
+                          : "-"}
+                      </td>
+                      <td>
+                        {a.resume_docx_download_url ? (
+                          <a
+                            href={a.resume_docx_download_url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            resume
+                          </a>
+                        ) : (
+                          <span className="small muted">—</span>
+                        )}
+                      </td>
+                      <td>
+                        {a.url ? (
+                          <a href={a.url} target="_blank" rel="noreferrer">
+                            open
+                          </a>
+                        ) : (
+                          <span className="small muted">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
                 {!listItems.length ? (
                   <tr>
                     <td
