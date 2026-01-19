@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import Principal, get_principal
 from ..db import SessionLocal
-from ..models import AdminUser, BaseResume, JDKeyInfo, StoredFile
+from ..models import AdminUser, BaseResume, JDKeyInfo, StoredFile, User
 from ..resume_docx import replace_bullets_in_docx, replace_summary_in_docx
 from ..pdf import resume_to_pdf_bytes
 from ..ai import tailor_rewrite_resume
@@ -261,11 +261,16 @@ def tailor_bullets(
         )
     # Apply summary (clamp)
     tailored_summary = ai.get("summary") or summary_original
-
+    print("cover letter+++++++++++++++", ai.get("cover_letter"))
+    user_name = db.query(User).filter(User.id == payload.user_id).first()
     tailored_cover_letter = (
-        (ai.get("cover_letter") or "").strip() if payload.include_cover_letter else ""
+        (ai.get("cover_letter") or "")
+        .strip()
+        .replace("\n[Your Name]", user_name.first_name)
+        if payload.include_cover_letter
+        else ""
     )
-
+    print("cover letter-------------", tailored_cover_letter)
     # Apply bullet rewrites deterministically (same count, same order per exp)
     exp_rewrites = {
         int(x.get("exp_index")): (x.get("rewrites") or [])
@@ -405,7 +410,7 @@ def export_tailored_docx(
         raise HTTPException(
             status_code=400, detail="export_format must be one of: docx, pdf, both"
         )
-
+    print("cover letter+++++++++++++++++", tailored.cover_letter)
     # If both, return a zip (base64)
     if fmt == "both":
         buf = BytesIO()

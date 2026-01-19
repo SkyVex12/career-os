@@ -49,6 +49,7 @@ class ApplyAndGenerateIn(BaseModel):
     url: str
     source_site: Optional[str] = None
     company: str
+    include_cover_letter: bool = True
     position: str
     jd_text: str
 
@@ -105,7 +106,10 @@ def apply_and_generate(
     keys = get_or_create_jd_keys(payload, db, principal)
     data = export_tailored_docx(
         ExportTailoredDocxIn(
-            user_id=payload.user_id, jd_key_id=keys["id"], export_format="both"
+            user_id=payload.user_id,
+            jd_key_id=keys["id"],
+            export_format="both",
+            include_cover_letter=payload.include_cover_letter,
         ),
         db,
         principal,
