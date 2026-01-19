@@ -101,7 +101,8 @@ def tailor_rewrite_resume(
             "Bullets must keep same count and same order as provided. source_index must match.",
             "Bullets: target <= 200 chars, hard cap <= 250 chars (10pt, max ~3 lines). Past tense. Strong verb first.",
             "MUST Use all JD keywords as verbatim in total",
-            "Cover letter: if cover_letter.include is true, 180-260 words, professional tone, no fabricated claims, no addresses; otherwise return empty string.",
+            # "Cover letter: if cover_letter.include is true, 180-260 words, professional tone, no fabricated claims, no addresses; otherwise return empty string.",
+            "Cover letter:180-260 words, professional tone, no fabricated claims, no addresses",
         ],
         "jd": {
             "core_hard_skills": core_hard,
@@ -120,7 +121,7 @@ def tailor_rewrite_resume(
         ],
         "cover_letter": {
             "include": bool(True),
-            "instructions": cover_letter_instructions or "",
+            # "instructions": cover_letter_instructions or "",
         },
     }
 
