@@ -5,8 +5,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, func
-from datetime import datetime, timedelta, timezone
+from sqlalchemy import or_, func, text, case
+from datetime import datetime, timedelta, timezone, date as date_type
 from pydantic import BaseModel, Field
 
 from ..auth import Principal, get_db, get_principal
@@ -97,20 +97,146 @@ def exists_application(
     }
 
 
+DAY_BOUNDARY_HOUR_UTC = 19
+
+
+def boundary_end_for_day_label(day_label: date_type) -> datetime:
+    """
+    day_label = YYYY-MM-DD shown on chart.
+    Window is: (day_label - 1 day) 19:00 UTC  ->  day_label 19:00 UTC
+    """
+    return datetime(
+        year=day_label.year,
+        month=day_label.month,
+        day=day_label.day,
+        hour=DAY_BOUNDARY_HOUR_UTC,
+        minute=0,
+        second=0,
+        microsecond=0,
+        tzinfo=timezone.utc,
+    )
+
+
 @router.get("/applications/stats")
 def applications_stats(
-    principal: Principal = Depends(get_principal),
+    principal: "Principal" = Depends(get_principal),
     user_id: str | None = Query(default=None),
     days: int = Query(default=30, ge=1, le=365),
+    day: date_type | None = Query(default=None),  # used when days==1
     db: Session = Depends(get_db),
 ):
+    # ---- base query (user-scoped) ----
     qset = db.query(Application)
+
     if user_id:
         qset = qset.filter(Application.user_id == user_id)
+    else:
+        qset = qset.filter(Application.user_id == principal.user_id)
 
-    # ---- stage counts ----
+    dialect = db.get_bind().dialect.name
+    now = datetime.now(timezone.utc)
+
+    # ---- determine end_boundary (7 PM) ----
+    if days == 1 and day is not None:
+        end_boundary = boundary_end_for_day_label(day)
+    else:
+        end_boundary = now.replace(
+            hour=DAY_BOUNDARY_HOUR_UTC, minute=0, second=0, microsecond=0
+        )
+        if now < end_boundary:
+            end_boundary -= timedelta(days=1)
+
+    # ---- determine window start and build series ----
+    if days == 1:
+        # Hourly series (last 24 hours inside selected 7PM window)
+        start_ts = end_boundary - timedelta(hours=23)
+        series_unit = "hour"
+
+        py_keys = [
+            (start_ts + timedelta(hours=i)).strftime("%Y-%m-%d %H:00")
+            for i in range(24)
+        ]
+
+        if dialect == "postgresql":
+            bucket_expr = func.date_trunc(
+                "hour", func.timezone("UTC", Application.created_at)
+            )
+            key_expr = func.to_char(bucket_expr, "YYYY-MM-DD HH24:00")
+        else:
+            key_expr = func.strftime("%Y-%m-%d %H:00", Application.created_at)
+
+        # Filter query to the selected window
+        window_q = qset.filter(
+            Application.created_at >= (end_boundary - timedelta(days=1)),
+            Application.created_at < end_boundary,
+        )
+
+        rows = (
+            window_q.with_entities(
+                key_expr.label("k"),
+                func.count(Application.id).label("cnt"),
+            )
+            .group_by(key_expr)
+            .order_by(key_expr)
+            .all()
+        )
+        bucket_map = {r.k: int(r.cnt) for r in rows}
+        series = [{"time": k, "count": bucket_map.get(k, 0)} for k in py_keys]
+
+        window = {
+            "start_utc": (end_boundary - timedelta(days=1)).isoformat(),
+            "end_utc": end_boundary.isoformat(),
+        }
+
+    else:
+        # Daily series (custom 7PM day buckets)
+        start_ts = end_boundary - timedelta(days=days - 1)
+        series_unit = "day_7pm_to_7pm"
+
+        py_keys = [
+            (start_ts + timedelta(days=i)).date().isoformat() for i in range(days)
+        ]
+
+        if dialect == "postgresql":
+            shifted = func.timezone(
+                "UTC",
+                Application.created_at
+                - text(f"interval '{DAY_BOUNDARY_HOUR_UTC} hours'"),
+            )
+            key_expr = func.to_char(func.date_trunc("day", shifted), "YYYY-MM-DD")
+        else:
+            key_expr = func.strftime(
+                "%Y-%m-%d",
+                Application.created_at,
+                f"-{DAY_BOUNDARY_HOUR_UTC} hours",
+            )
+
+        # Filter query to the selected window
+        window_q = qset.filter(
+            Application.created_at >= (end_boundary - timedelta(days=days)),
+            Application.created_at < end_boundary,
+        )
+
+        rows = (
+            window_q.with_entities(
+                key_expr.label("k"),
+                func.count(Application.id).label("cnt"),
+            )
+            .group_by(key_expr)
+            .order_by(key_expr)
+            .all()
+        )
+        bucket_map = {r.k: int(r.cnt) for r in rows}
+        series = [{"day": k, "count": bucket_map.get(k, 0)} for k in py_keys]
+
+        window = {
+            "start_utc": (end_boundary - timedelta(days=days)).isoformat(),
+            "end_utc": end_boundary.isoformat(),
+        }
+
+    # ✅ IMPORTANT: stage counts must use the SAME window_q
     stage_rows = (
-        qset.with_entities(
+        window_q.with_entities(
             func.lower(Application.stage).label("stage"),
             func.count(Application.id).label("cnt"),
         )
@@ -119,72 +245,85 @@ def applications_stats(
     )
     stage_counts = {(r.stage or "applied"): int(r.cnt) for r in stage_rows}
 
-    # Use UTC "now" (naive). This matches most setups where created_at is stored as UTC.
-    now = datetime.utcnow()
-
-    # ---- series config ----
-    if days == 1:
-        step = "hour"
-        cutoff = now - timedelta(hours=23)
-        py_keys = [
-            (cutoff + timedelta(hours=i)).strftime("%Y-%m-%d %H:00") for i in range(24)
-        ]
-        sqlite_fmt = "%Y-%m-%d %H:00"
-        pg_fmt = "YYYY-MM-DD HH24:00"
-    else:
-        step = "day"
-        cutoff = now - timedelta(days=days - 1)
-        py_keys = [(cutoff + timedelta(days=i)).date().isoformat() for i in range(days)]
-        sqlite_fmt = "%Y-%m-%d"
-        pg_fmt = "YYYY-MM-DD"
-
-    # ---- build time expression as STRING (dialect-safe) ----
-    dialect = db.get_bind().dialect.name  # "postgresql" or "sqlite" etc.
-
-    if dialect == "postgresql":
-        # Normalize to UTC text. Works well even if your DB/session timezone is not UTC.
-        # If created_at is "timestamp without time zone" and already UTC, this is still fine.
-        created_at_utc = func.timezone("UTC", Application.created_at)
-        time_expr = func.to_char(created_at_utc, pg_fmt)
-    else:
-        # SQLite
-        time_expr = func.strftime(sqlite_fmt, Application.created_at)
-    rows = (
-        qset.filter(Application.created_at >= cutoff)
-        .with_entities(
-            time_expr.label("t"),
-            func.count(Application.id).label("cnt"),
-        )
-        .group_by(time_expr)
-        .order_by(time_expr)
-        .all()
-    )
-
-    # t is now a string key (same type as py_keys)
-    day_map = {r.t: int(r.cnt) for r in rows}
-
-    # ---- build series ----
-    series = []
-    if step == "hour":
-        for k in py_keys:
-            series.append({"time": k, "count": day_map.get(k, 0)})
-    else:
-        for k in py_keys:
-            series.append({"day": k, "count": day_map.get(k, 0)})
-
-    print("sample db keys:", list(day_map.keys()))
-    print("sample py keys:", py_keys)
+    # ---- summary metrics (window-scoped) ----
     total = int(sum(stage_counts.values()))
     interviews = int(stage_counts.get("interview", 0))
     offers = int(stage_counts.get("offer", 0))
     rejected = int(stage_counts.get("rejected", 0))
     applied = int(stage_counts.get("applied", 0))
 
+    # ==========================================================
+    # ✅ NEW: Per-source-site success stats (window-scoped)
+    # ==========================================================
+    stage_l = func.lower(Application.stage)
+
+    applied_flag = case((stage_l == "applied", 1), else_=0)
+    interview_flag = case((stage_l == "interview", 1), else_=0)
+    offer_flag = case((stage_l == "offer", 1), else_=0)
+    rejected_flag = case((stage_l == "rejected", 1), else_=0)
+
+    # reached interview == interview OR offer (you can expand later)
+    reached_interview_flag = case(
+        (stage_l.in_(["interview", "offer"]), 1),
+        else_=0,
+    )
+
+    # success == offer
+    success_flag = offer_flag
+
+    # normalize source_site
+    source_expr = func.coalesce(
+        func.nullif(func.trim(Application.source_site), ""),
+        "unknown",
+    )
+    source_expr = func.lower(source_expr)
+
+    source_rows = (
+        window_q.with_entities(
+            source_expr.label("source_site"),
+            func.count(Application.id).label("total"),
+            func.sum(applied_flag).label("applied"),
+            func.sum(interview_flag).label("interview"),
+            func.sum(offer_flag).label("offer"),
+            func.sum(rejected_flag).label("rejected"),
+            func.sum(reached_interview_flag).label("reached_interview"),
+            func.sum(success_flag).label("success"),
+        )
+        .group_by(source_expr)
+        .order_by(func.count(Application.id).desc())
+        .all()
+    )
+
+    source_site_stats = []
+    for r in source_rows:
+        total_s = int(r.total or 0)
+        reached_interview = int(r.reached_interview or 0)
+        success = int(r.success or 0)
+
+        source_site_stats.append(
+            {
+                "source_site": r.source_site,
+                "total": total_s,
+                "applied_count": int(r.applied or 0),
+                "interview_count": int(r.interview or 0),
+                "offer_count": int(r.offer or 0),
+                "rejected_count": int(r.rejected or 0),
+                "interview_rate": reached_interview / max(1, total_s),
+                "success_rate": success / max(1, total_s),
+            }
+        )
+
+    source_site_stats.sort(
+        key=lambda x: (x["interview_rate"], x["total"]),
+        reverse=True,
+    )
+
     return {
         "total": total,
         "stage_counts": stage_counts,
         "series": series,
-        "series_unit": step,
+        "series_unit": "hour" if series_unit == "hour" else "day",
+        "window": window,
         "success_rate": offers / max(1, total),
         "interview_rate": interviews / max(1, total),
         "rejection_rate": rejected / max(1, total),
@@ -192,6 +331,8 @@ def applications_stats(
         "interview_count": interviews,
         "offer_count": offers,
         "rejected_count": rejected,
+        # ✅ NEW
+        "source_site_stats": source_site_stats,
     }
 
 
