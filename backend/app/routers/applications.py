@@ -131,7 +131,7 @@ def applications_stats(
     if user_id:
         qset = qset.filter(Application.user_id == user_id)
     else:
-        qset = qset.filter(Application.user_id == principal.user_id)
+        qset = qset.filter(Application.user_id == principal.id)
 
     dialect = db.get_bind().dialect.name
     now = datetime.now(timezone.utc)
