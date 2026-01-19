@@ -54,7 +54,7 @@ def signup(payload: SignupIn, db: Session = Depends(get_db)):
     if exists:
         raise HTTPException(status_code=409, detail="Email already registered")
 
-    now = dt.datetime.utcnow()
+    now = dt.datetime.now()
     full_name = f"{payload.firstname or ''} {payload.lastname or ''}".strip() or None
     if payload.role == "admin":
         admin_id = f"a{now.strftime('%Y%m%d%H%M%S')}{now.microsecond}"

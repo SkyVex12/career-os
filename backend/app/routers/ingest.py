@@ -62,7 +62,7 @@ def apply_and_generate(
 ):
     _ensure_access(db, principal, payload.user_id)
 
-    now = dt.datetime.utcnow()
+    now = dt.datetime.now()
     # idempotent by (user_id, url)
     existing = (
         db.query(Application)
@@ -73,7 +73,7 @@ def apply_and_generate(
     if existing:
         app_row = existing
     else:
-        app_id = f"app{dt.datetime.utcnow().strftime('%Y%m%d%H%M%S')}{dt.datetime.utcnow().microsecond}"
+        app_id = f"app{dt.datetime.now().strftime('%Y%m%d%H%M%S')}{dt.datetime.now().microsecond}"
         app_row = Application(
             id=app_id,
             user_id=payload.user_id,

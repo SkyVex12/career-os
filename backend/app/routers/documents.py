@@ -61,7 +61,7 @@ def create_document(payload: DocumentIn, db: Session = Depends(get_db)):
     doc = Document(
         title=payload.title,
         doc_type=payload.doc_type,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(),
     )
     db.add(doc)
     db.commit()
@@ -86,7 +86,7 @@ def list_versions(doc_id: int, db: Session = Depends(get_db)):
 @router.post("/documents/generate", response_model=DocumentVersionOut)
 def generate_document(req: GenerateRequest, db: Session = Depends(get_db)):
     # Placeholder generation: connect OpenAI next.
-    now = datetime.utcnow()
+    now = datetime.now()
 
     doc = Document(
         title=f"Generated {req.doc_type} ({now.isoformat(timespec='seconds')}Z)",
@@ -109,7 +109,7 @@ Context:
 
     ver = DocumentVersion(
         document_id=doc.id,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(),
         content=content,
     )
     db.add(ver)

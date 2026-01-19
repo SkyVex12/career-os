@@ -78,7 +78,7 @@ def admin_create_user_and_link(
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
 
-    now = dt.datetime.utcnow()
+    now = dt.datetime.now()
     user_id = f"u{now.strftime('%Y%m%d%H%M%S')}{now.microsecond}"
 
     user = User(
@@ -164,7 +164,7 @@ async def put_base_resume_docx(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to parse DOCX: {str(e)}")
 
-    now = dt.datetime.utcnow()
+    now = dt.datetime.now()
 
     # Upsert BaseResume row
     row = db.get(BaseResume, user_id)
@@ -230,7 +230,7 @@ def put_base_resume(
         ):
             raise HTTPException(status_code=403, detail="Forbidden")
 
-    now = dt.datetime.utcnow()
+    now = dt.datetime.now()
     row = db.get(BaseResume, user_id)
     if row:
         row.content_text = payload.content_text
@@ -353,7 +353,7 @@ def admin_link_user(
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
 
-    now = dt.datetime.utcnow()
+    now = dt.datetime.now()
     existing = (
         db.query(AdminUser)
         .filter(

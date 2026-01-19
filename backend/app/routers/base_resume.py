@@ -37,7 +37,7 @@ def put_base_resume(
         db.commit()
 
     br = db.get(BaseResume, user_id)
-    now = datetime.utcnow()
+    now = datetime.now()
     if br:
         br.content_text = payload.content_text
         br.updated_at = now

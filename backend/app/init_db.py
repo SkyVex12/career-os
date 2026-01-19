@@ -55,7 +55,7 @@ def ensure_schema() -> None:
     if seed:
         db: Session = SessionLocal()
         try:
-            now = dt.datetime.utcnow()
+            now = dt.datetime.now()
 
             if db.query(Admin).first() is None:
                 admin_id = "a1"

@@ -118,7 +118,7 @@ def get_or_create_jd_keys(
         }
 
     keys = _extract_keys(payload.jd_text)
-    now = datetime.utcnow()
+    now = datetime.now()
     row = JDKeyInfo(
         user_id=payload.user_id,
         source_url=source_url,

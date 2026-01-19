@@ -19,8 +19,8 @@ class Admin(Base):
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     dob = Column(String, nullable=True)  # ISO date string (YYYY-MM-DD)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, nullable=False)
 
 
 class User(Base):
@@ -30,8 +30,8 @@ class User(Base):
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     dob = Column(String, nullable=True)  # ISO date string (YYYY-MM-DD)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, nullable=False)
 
 
 class AdminUser(Base):
@@ -41,7 +41,7 @@ class AdminUser(Base):
     id = Column(Integer, primary_key=True)
     admin_id = Column(String, ForeignKey("admins.id"), index=True, nullable=False)
     user_id = Column(String, ForeignKey("users.id"), index=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
 
     __table_args__ = (UniqueConstraint("admin_id", "user_id", name="uq_admin_user"),)
 
@@ -54,7 +54,7 @@ class AuthCredential(Base):
     principal_type = Column(String, nullable=False)  # 'admin' | 'user'
     principal_id = Column(String, nullable=False)  # admin_id or user_id
     principal_name = Column(String, nullable=False)  # principal name
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
 
 
 class AuthToken(Base):
@@ -64,15 +64,15 @@ class AuthToken(Base):
     principal_type = Column(String, nullable=False)  # 'admin' | 'user'
     principal_id = Column(String, nullable=False)  # admin_id or user_id
     principal_name = Column(String, nullable=False)  # principal name
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
 
 
 class BaseResume(Base):
     __tablename__ = "base_resumes"
     user_id = Column(String, primary_key=True)
     content_text = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, nullable=False)
 
 
 class Application(Base):
@@ -86,8 +86,8 @@ class Application(Base):
     url = Column(String, index=True, nullable=False)
     source_site = Column(String, nullable=True)
     stage = Column(String, default="applied")
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, nullable=False)
 
 
 class JDKeyInfo(Base):
@@ -100,7 +100,7 @@ class JDKeyInfo(Base):
     scope = Column(String, default="fragment", nullable=False)  # canonical|fragment
     keys_json = Column(Text, nullable=False)
     model = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
 
     __table_args__ = (
         UniqueConstraint(
@@ -119,8 +119,7 @@ class JobDescription(Base):
     user_id = Column(String, index=True, nullable=False)
     application_id = Column(String, index=True, nullable=False)
     jd_text = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
 
 
 class ResumeVersion(Base):
@@ -131,7 +130,7 @@ class ResumeVersion(Base):
     jd_key_id = Column(Integer, nullable=True)
     schema_version = Column(String, nullable=False, default="tailor_v2")
     tailored_json = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
 
 
 class StoredFile(Base):
@@ -144,7 +143,8 @@ class StoredFile(Base):
     path = Column(String, nullable=False)
     mime = Column(String, nullable=False)
     filename = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+
 
 class OutlookIntegration(Base):
     __tablename__ = "outlook_integrations"
@@ -155,8 +155,8 @@ class OutlookIntegration(Base):
     expires_at = Column(DateTime, nullable=True)
     last_sync_at = Column(DateTime, nullable=True)
     auto_update = Column(Integer, default=0)  # 0/1
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, nullable=False)
 
 
 class EmailEvent(Base):
@@ -172,7 +172,7 @@ class EmailEvent(Base):
     body_preview = Column(Text, nullable=True)
     web_link = Column(String, nullable=True)
     raw_json = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
 
     __table_args__ = (
         UniqueConstraint(
@@ -194,5 +194,5 @@ class ApplicationUpdateSuggestion(Base):
     confidence = Column(Integer, default=0)  # 0-100
     reason = Column(Text, nullable=True)
     status = Column(String, default="pending")  # pending|approved|rejected|applied
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, nullable=False)

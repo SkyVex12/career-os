@@ -34,7 +34,7 @@ class MessageOut(MessageIn):
 
 
 def _now():
-    return datetime.utcnow()
+    return datetime.now()
 
 
 @router.get("/assistant/threads", response_model=List[ThreadOut])
