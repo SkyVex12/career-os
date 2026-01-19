@@ -264,9 +264,11 @@ def tailor_bullets(
     print("cover letter+++++++++++++++", ai.get("cover_letter"))
     user_name = db.query(User).filter(User.id == payload.user_id).first()
     tailored_cover_letter = (
-        (ai.get("cover_letter") or "")
-        .strip()
-        .replace("\n[Your Name]", user_name.first_name)
+        re.sub(
+            r"\n{1,2}\[Your Name\]",
+            f"\n{user_name.first_name}",
+            (ai.get("cover_letter") or "").strip(),
+        )
         if payload.include_cover_letter
         else ""
     )
