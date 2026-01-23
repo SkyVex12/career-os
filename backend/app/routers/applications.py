@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone, date as date_type
 from pydantic import BaseModel, Field
 
 from ..auth import Principal, get_db, get_principal
-from ..models import Application, AdminUser, Admin, User, StoredFile
+from ..models import Application, AdminUser, JobDescription, Admin, User, StoredFile
 
 router = APIRouter(prefix="/v1", tags=["applications"])
 
@@ -72,12 +72,17 @@ def exists_application(
     _ensure_access(db, principal, user_id)
     row = (
         db.query(Application)
+        .join(
+            job_description := JobDescription,
+            job_description.application_id == Application.id,
+        )
         .filter(Application.user_id == user_id, Application.url == url)
         .order_by(Application.created_at.desc())
         .first()
     )
     if not row:
         return {"exists": False}
+
     return {
         "exists": True,
         "application": {
@@ -88,8 +93,10 @@ def exists_application(
                 if row.admin_id
                 else db.get(User, row.user_id).name
             ),
+            "source_site": row.source_site,
             "company": row.company,
             "role": row.role,
+            "jd_text": row.job_description.jd_text,
             "stage": row.stage,
             "url": row.url,
             "created_at": row.created_at.isoformat() if row.created_at else None,

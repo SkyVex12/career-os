@@ -52,6 +52,7 @@ class ApplyAndGenerateIn(BaseModel):
     include_cover_letter: bool = True
     position: str
     jd_text: str
+    have_to_generate: bool = True
 
 
 @router.post("/ingest/apply-and-generate")
@@ -102,6 +103,13 @@ def apply_and_generate(
             "after flush jd exists?",
             db.query(JobDescription).filter_by(application_id=app_row.id).count(),
         )
+
+    if not payload.have_to_generate:
+        db.commit()
+        return {
+            "application_id": app_row.id,
+            "message": "Application created without resume generation as requested",
+        }
 
     keys = get_or_create_jd_keys(payload, db, principal)
     data = export_tailored_docx(
