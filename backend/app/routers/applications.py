@@ -71,35 +71,40 @@ def exists_application(
 ):
     _ensure_access(db, principal, user_id)
     row = (
-        db.query(Application)
-        .join(
-            job_description := JobDescription,
-            job_description.application_id == Application.id,
+        db.query(Application, JobDescription)
+        .join(JobDescription, JobDescription.application_id == Application.id)
+        .filter(
+            Application.user_id == user_id,
+            Application.url == url,
         )
-        .filter(Application.user_id == user_id, Application.url == url)
         .order_by(Application.created_at.desc())
         .first()
     )
+
+    application, job_description = row
+
     if not row:
         return {"exists": False}
 
     return {
         "exists": True,
         "application": {
-            "id": row.id,
-            "user_id": row.user_id,
+            "id": application.id,
+            "user_id": application.user_id,
             "created_by": (
-                db.get(Admin, row.admin_id).name
-                if row.admin_id
-                else db.get(User, row.user_id).name
+                db.get(Admin, application.admin_id).name
+                if application.admin_id
+                else db.get(User, application.user_id).name
             ),
-            "source_site": row.source_site,
-            "company": row.company,
-            "role": row.role,
-            "jd_text": row.job_description.jd_text,
-            "stage": row.stage,
-            "url": row.url,
-            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "source_site": application.source_site,
+            "company": application.company,
+            "role": application.role,
+            "jd_text": job_description.jd_text,
+            "stage": application.stage,
+            "url": application.url,
+            "created_at": (
+                application.created_at.isoformat() if application.created_at else None
+            ),
         },
     }
 
