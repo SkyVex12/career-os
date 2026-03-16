@@ -1,6 +1,6 @@
 substitutions:
   _SERVICE_NAME: career-os-backend
-  _REGION: us-central1
+  _REGION: us-east1
   _AR_REPO: career-os
   _IMAGE_NAME: backend
 
