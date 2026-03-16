@@ -72,7 +72,7 @@ def exists_application(
     _ensure_access(db, principal, user_id)
     row = (
         db.query(Application, JobDescription)
-        .join(JobDescription, JobDescription.application_id == Application.id)
+        .outerjoin(JobDescription, JobDescription.application_id == Application.id)
         .filter(
             Application.user_id == user_id,
             Application.url == url,
@@ -81,10 +81,10 @@ def exists_application(
         .first()
     )
 
-    application, job_description = row
-
     if not row:
         return {"exists": False}
+
+    application, job_description = row
 
     return {
         "exists": True,
@@ -99,7 +99,7 @@ def exists_application(
             "source_site": application.source_site,
             "company": application.company,
             "role": application.role,
-            "jd_text": job_description.jd_text,
+            "jd_text": job_description.jd_text if job_description else None,
             "stage": application.stage,
             "url": application.url,
             "created_at": (
