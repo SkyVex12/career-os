@@ -32,6 +32,10 @@ steps:
       - --allow-unauthenticated
       - --port
       - "8080"
+      - --set-env-vars
+      - SEED_DEV_USERS=0,OUTLOOK_TENANT_ID=common
+      - --set-secrets
+      - DATABASE_URL=career-os-database-url:latest,OPENAI_API_KEY=career-os-openai-key:latest,SITE_GATE_PASSWORD=career-os-gate-password:latest,GATE_JWT_SECRET=career-os-gate-jwt-secret:latest,CLOUDINARY_CLOUD_NAME=career-os-cloudinary-cloud-name:latest,CLOUDINARY_API_KEY=career-os-cloudinary-api-key:latest,CLOUDINARY_API_SECRET=career-os-cloudinary-api-secret:latest
 
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:$COMMIT_SHA
