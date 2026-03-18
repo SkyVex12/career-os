@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -70,7 +71,8 @@ def _sha256(s: str) -> str:
 def _extract_keys(jd_text: str) -> Dict[str, Any]:
     compress_prompt = build_prompt_compress_jd(jd_text)
     ats_package = call_openai_json(compress_prompt)
-
+    if isinstance(ats_package, dict):
+        return ats_package
     return json.loads(ats_package)
 
 
@@ -126,7 +128,7 @@ def get_or_create_jd_keys(
         text_hash=text_hash,
         scope="canonical",
         keys_json=json.dumps(keys, ensure_ascii=False),
-        model="heuristic_v1",
+        model=os.getenv("OPENAI_JD_MODEL", "gpt-5-mini"),
         created_at=now,
     )
     db.add(row)

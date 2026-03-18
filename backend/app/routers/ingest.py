@@ -24,7 +24,7 @@ from ..models import (
 )
 from ..storage import save_bytes
 from .jd import get_or_create_jd_keys
-from .resume_builder import export_tailored_docx, ExportTailoredDocxIn
+from .resume_builder import _generate_resume_bundle, GenerateResumeFromScratchIn
 
 router = APIRouter(prefix="/v1", tags=["ingest"])
 
@@ -51,8 +51,9 @@ class ApplyAndGenerateIn(BaseModel):
     company: str
     include_cover_letter: bool = True
     position: str
-    jd_text: str
+    jd_text: str = ""
     have_to_generate: bool = True
+    resume_json_text: Optional[str] = None
 
 
 @router.post("/ingest/apply-and-generate")
@@ -73,6 +74,30 @@ def apply_and_generate(
     )
     if existing:
         app_row = existing
+        app_row.source_site = payload.source_site
+        app_row.admin_id = principal.id if principal.type == "admin" else app_row.admin_id
+        app_row.company = payload.company
+        app_row.role = payload.position
+        app_row.stage = "applied"
+        app_row.updated_at = now
+
+        jd_row = (
+            db.query(JobDescription)
+            .filter(JobDescription.application_id == app_row.id)
+            .order_by(JobDescription.created_at.desc())
+            .first()
+        )
+        if jd_row:
+            jd_row.jd_text = payload.jd_text
+        else:
+            db.add(
+                JobDescription(
+                    user_id=payload.user_id,
+                    application_id=app_row.id,
+                    jd_text=payload.jd_text,
+                )
+            )
+        db.flush()
     else:
         app_id = f"app{dt.datetime.now().strftime('%Y%m%d%H%M%S')}{dt.datetime.now().microsecond}"
         app_row = Application(
@@ -111,17 +136,33 @@ def apply_and_generate(
             "message": "Application created without resume generation as requested",
         }
 
-    keys = get_or_create_jd_keys(payload, db, principal)
-    data = export_tailored_docx(
-        ExportTailoredDocxIn(
+    keys = None
+    if not (payload.resume_json_text or "").strip():
+        keys = get_or_create_jd_keys(payload, db, principal)
+    data = _generate_resume_bundle(
+        GenerateResumeFromScratchIn(
             user_id=payload.user_id,
-            jd_key_id=keys["id"],
+            jd_text=payload.jd_text,
+            company=payload.company,
+            position=payload.position,
             export_format="both",
             include_cover_letter=payload.include_cover_letter,
+            resume_json_text=payload.resume_json_text or "",
         ),
         db,
         principal,
     )
+
+    if data.get("blocked"):
+        db.commit()
+        out = {
+            "application_id": app_row.id,
+            "blocked": True,
+            "block_reason": data.get("block_reason"),
+        }
+        if payload.include_cover_letter and "cover_letter" in data:
+            out["cover_letter"] = data["cover_letter"]
+        return out
 
     # export endpoint returns a zip bundle when export_format="both"
     if "bundle_zip_base64" in data:
@@ -139,12 +180,21 @@ def apply_and_generate(
         id=rv_id,
         user_id=payload.user_id,
         application_id=app_row.id,
-        jd_key_id=keys.get("id"),
-        schema_version="tailor_v2",
-        tailored_json=json.dumps(data.get("ai_output") or {}, ensure_ascii=False),
+        jd_key_id=keys.get("id") if keys else None,
+        schema_version="manual_json_v1" if (payload.resume_json_text or "").strip() else "scratch_v1",
+        tailored_json=json.dumps(data.get("resume_json") or {}, ensure_ascii=False),
         created_at=now,
     )
     db.add(rv)
+
+    (
+        db.query(StoredFile)
+        .filter(
+            StoredFile.application_id == app_row.id,
+            StoredFile.kind.in_(["resume_docx", "resume_pdf"]),
+        )
+        .delete(synchronize_session=False)
+    )
 
     file_id = f"file{now.strftime('%Y%m%d%H%M%S')}{now.microsecond}"
     user = db.get(User, payload.user_id)
@@ -206,10 +256,14 @@ def apply_and_generate(
                 if resume_pdf_file_id
                 else None
             ),
-            "cover_letter": data["cover_letter"],
+            **(
+                {"cover_letter": data["cover_letter"]}
+                if payload.include_cover_letter and "cover_letter" in data
+                else {}
+            ),
         }
     )
-    return {
+    out = {
         "application_id": app_row.id,
         "resume_version_id": rv_id,
         "resume_docx_file_id": file_id,
@@ -218,5 +272,7 @@ def apply_and_generate(
         "resume_pdf_download_url": (
             f"/v1/files/{resume_pdf_file_id}/download" if resume_pdf_file_id else None
         ),
-        "cover_letter": data["cover_letter"],
     }
+    if payload.include_cover_letter and "cover_letter" in data:
+        out["cover_letter"] = data["cover_letter"]
+    return out

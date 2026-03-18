@@ -125,6 +125,17 @@ def migrate_sqlite(engine: Engine) -> None:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE applications ADD COLUMN source_site TEXT;"))
 
+    for col in (
+        "phone",
+        "location",
+        "linkedin_url",
+        "github_url",
+        "portfolio_url",
+    ):
+        if not _has_column(engine, "users", col):
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} TEXT;"))
+
     # stored_files.user_id
     if _has_table(engine, "stored_files") and (not _has_column(engine, "stored_files", "user_id")):
         with engine.begin() as conn:
@@ -154,4 +165,3 @@ def migrate_sqlite(engine: Engine) -> None:
             """
                 )
             )
-

@@ -5,6 +5,7 @@ from typing import Dict, List, Any
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+DEFAULT_JD_MODEL = os.getenv("OPENAI_JD_MODEL", "gpt-5-mini")
 
 # ================= OPENAI RESPONSE PARSING ================= #
 
@@ -24,8 +25,7 @@ def extract_text(response) -> str:
 
 def call_openai_json(
     prompt: str,
-    model: str = "gpt-4.1-mini",
-    temperature: float = 0.3,
+    model: str = DEFAULT_JD_MODEL,
     max_retries: int = 4,
     retry_sleep: float = 2.0,
 ) -> dict:
@@ -41,7 +41,6 @@ def call_openai_json(
             response = client.responses.create(
                 model=model,
                 input=prompt,
-                temperature=temperature,
                 timeout=90,
             )
 
@@ -60,7 +59,7 @@ def call_openai_json(
             if match:
                 candidate = match.group(0)
                 try:
-                    return candidate
+                    return json.loads(candidate)
                 except json.JSONDecodeError:
                     pass
 
@@ -108,4 +107,8 @@ JOB DESCRIPTION:
 # ---------------------------
 
 # Kept for backward compatibility: the router imports from app.ai
-from .services.ai_service import tailor_rewrite_resume  # noqa: E402
+from .services.ai_service import (  # noqa: E402
+    tailor_rewrite_resume,
+    generate_resume_from_scratch,
+    normalize_imported_resume,
+)

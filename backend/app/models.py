@@ -30,6 +30,11 @@ class User(Base):
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     dob = Column(String, nullable=True)  # ISO date string (YYYY-MM-DD)
+    phone = Column(String, nullable=True)
+    location = Column(String, nullable=True)
+    linkedin_url = Column(String, nullable=True)
+    github_url = Column(String, nullable=True)
+    portfolio_url = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
     updated_at = Column(DateTime, default=datetime.now, nullable=False)
 

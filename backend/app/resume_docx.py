@@ -5,6 +5,11 @@ from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple, Set
 
 from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.opc.constants import RELATIONSHIP_TYPE
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Inches, Pt
 from docx.text.paragraph import Paragraph
 
 
@@ -420,6 +425,262 @@ def replace_bullets_in_docx(
             paragraphs = get_paragraphs()
             if 0 <= idx < len(paragraphs):
                 _set_paragraph_text_preserve_format(paragraphs[idx], new_bullets[j])
+
+    out = BytesIO()
+    doc.save(out)
+    return out.getvalue()
+
+
+_BOLD_TAG_RE = re.compile(r"(<b>.*?</b>)", re.IGNORECASE | re.DOTALL)
+_STRIP_TAG_RE = re.compile(r"</?b>", re.IGNORECASE)
+
+
+def _normalize_bold_markup(text: str) -> str:
+    text = (text or "").replace("<br>", " ").replace("<br/>", " ").strip()
+    text = re.sub(r"<\s*/\s*b\s*>", "</b>", text, flags=re.IGNORECASE)
+    text = re.sub(r"<\s*b\s*>", "<b>", text, flags=re.IGNORECASE)
+    open_count = len(re.findall(r"<b>", text, flags=re.IGNORECASE))
+    close_count = len(re.findall(r"</b>", text, flags=re.IGNORECASE))
+    if close_count > open_count:
+        diff = close_count - open_count
+        for _ in range(diff):
+            text = re.sub(r"</b>", "", text, count=1, flags=re.IGNORECASE)
+    elif open_count > close_count:
+        text += "</b>" * (open_count - close_count)
+    return text
+
+
+def _clean_markup_text(text: str) -> str:
+    return _normalize_bold_markup(text)
+
+
+def _add_markup_paragraph(
+    doc: Document,
+    text: str,
+    *,
+    bold: bool = False,
+    italic: bool = False,
+    size: int = 10,
+    align: WD_ALIGN_PARAGRAPH | None = None,
+    left_indent: float = 0.0,
+    space_after: int = 0,
+) -> Paragraph:
+    p = doc.add_paragraph()
+    if align is not None:
+        p.alignment = align
+    p.paragraph_format.left_indent = Inches(left_indent)
+    p.paragraph_format.space_after = Pt(space_after)
+
+    parts = _BOLD_TAG_RE.split(_clean_markup_text(text))
+    for part in parts:
+        if not part:
+            continue
+        is_bold_part = part.lower().startswith("<b>") and part.lower().endswith("</b>")
+        run = p.add_run(_STRIP_TAG_RE.sub("", part))
+        run.bold = bold or is_bold_part
+        run.italic = italic
+        run.font.size = Pt(size)
+        run.font.name = "Calibri"
+    return p
+
+
+def _add_hyperlink(paragraph: Paragraph, text: str, url: str) -> None:
+    part = paragraph.part
+    r_id = part.relate_to(url, RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
+    hyperlink = OxmlElement("w:hyperlink")
+    hyperlink.set(qn("r:id"), r_id)
+
+    run = OxmlElement("w:r")
+    r_pr = OxmlElement("w:rPr")
+
+    color = OxmlElement("w:color")
+    color.set(qn("w:val"), "0563C1")
+    r_pr.append(color)
+
+    underline = OxmlElement("w:u")
+    underline.set(qn("w:val"), "single")
+    r_pr.append(underline)
+
+    run.append(r_pr)
+    text_el = OxmlElement("w:t")
+    text_el.text = text
+    run.append(text_el)
+    hyperlink.append(run)
+    paragraph._p.append(hyperlink)
+
+
+def _add_contact_line(doc: Document, items: list) -> None:
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_after = Pt(4)
+    first = True
+    for item in items:
+        if isinstance(item, dict):
+            text = str(item.get("text") or item.get("label") or "").strip()
+            url = str(item.get("url") or "").strip()
+        else:
+            text = str(item).strip()
+            url = ""
+        if not text:
+            continue
+        if not first:
+            sep = p.add_run(" | ")
+            sep.font.size = Pt(9)
+            sep.font.name = "Calibri"
+        if url:
+            _add_hyperlink(p, text, url)
+        else:
+            run = p.add_run(text)
+            run.font.size = Pt(9)
+            run.font.name = "Calibri"
+        first = False
+
+
+def _add_experience_header(
+    doc: Document,
+    *,
+    company: str,
+    location: str,
+    duration: str,
+    job_title: str,
+) -> None:
+    table = doc.add_table(rows=1, cols=2)
+    table.autofit = True
+    left = table.cell(0, 0).paragraphs[0]
+    right = table.cell(0, 1).paragraphs[0]
+    right.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    left_parts = [job_title, company]
+    if location:
+        left_parts.append(location)
+    company_line = " | ".join([part for part in left_parts if part])
+    company_run = left.add_run(company_line)
+    company_run.bold = True
+    company_run.font.name = "Calibri"
+    company_run.font.size = Pt(10.5)
+
+    right_run = right.add_run(duration or "")
+    right_run.font.name = "Calibri"
+    right_run.font.size = Pt(10)
+
+
+def build_resume_docx_bytes(resume: Dict[str, Any]) -> bytes:
+    doc = Document()
+    section = doc.sections[0]
+    section.top_margin = Inches(0.55)
+    section.bottom_margin = Inches(0.55)
+    section.left_margin = Inches(0.65)
+    section.right_margin = Inches(0.65)
+
+    job_title = (resume.get("job_title") or "Software Engineer").strip()
+    candidate = resume.get("candidate") or {}
+    candidate_name = (candidate.get("name") or "").strip()
+    contact_items = candidate.get("contact_items") or []
+    summary = (resume.get("summary") or "").strip()
+    skills = resume.get("skills") or []
+    experiences = resume.get("experiences") or []
+    education = resume.get("education") or []
+
+    if candidate_name:
+        _add_markup_paragraph(
+            doc,
+            candidate_name.upper(),
+            bold=True,
+            size=18,
+            align=WD_ALIGN_PARAGRAPH.CENTER,
+            space_after=4,
+        )
+    if contact_items:
+        _add_contact_line(doc, contact_items)
+    _add_markup_paragraph(
+        doc,
+        job_title,
+        bold=True,
+        size=13,
+        align=WD_ALIGN_PARAGRAPH.CENTER,
+        space_after=8,
+    )
+
+    sections = [
+        ("Summary", summary),
+        ("Skills", skills),
+        ("Experience", experiences),
+        ("Education", education),
+    ]
+
+    for idx, (title, payload) in enumerate(sections):
+        _add_markup_paragraph(doc, title.upper(), bold=True, size=11.5, space_after=4)
+
+        if title == "Summary":
+            _add_markup_paragraph(doc, str(payload or ""), size=10, space_after=8)
+
+        elif title == "Skills":
+            for item in payload:
+                category = str(item.get("category") or "").strip()
+                values = [str(v).strip() for v in (item.get("items") or []) if str(v).strip()]
+                p = doc.add_paragraph()
+                p.paragraph_format.left_indent = Inches(0.1)
+                p.paragraph_format.space_after = Pt(2)
+                prefix = p.add_run("- ")
+                prefix.font.size = Pt(10)
+                prefix.font.name = "Calibri"
+                if category:
+                    cat = p.add_run(category)
+                    cat.bold = True
+                    cat.font.size = Pt(10)
+                    cat.font.name = "Calibri"
+                    colon = p.add_run(": ")
+                    colon.font.size = Pt(10)
+                    colon.font.name = "Calibri"
+                vals = p.add_run(", ".join(values))
+                vals.font.size = Pt(10)
+                vals.font.name = "Calibri"
+            doc.add_paragraph().paragraph_format.space_after = Pt(4)
+
+        elif title == "Experience":
+            for exp in payload:
+                company = str(exp.get("company") or "").strip()
+                location = str(exp.get("location") or "").strip()
+                _add_experience_header(
+                    doc,
+                    company=company,
+                    location=location,
+                    duration=str(exp.get("duration") or "").strip(),
+                    job_title=str(exp.get("job_title") or "").strip(),
+                )
+                for sentence in exp.get("sentences") or []:
+                    _add_markup_paragraph(
+                        doc,
+                        f"- {_clean_markup_text(str(sentence))}",
+                        size=10,
+                        left_indent=0.18,
+                        space_after=2,
+                    )
+                doc.add_paragraph().paragraph_format.space_after = Pt(3)
+
+        elif title == "Education":
+            for item in payload:
+                _add_markup_paragraph(
+                    doc,
+                    str(item.get("school") or "").strip(),
+                    size=10,
+                    space_after=1,
+                )
+                _add_markup_paragraph(
+                    doc,
+                    str(item.get("degree") or "").strip(),
+                    size=10,
+                    space_after=1,
+                )
+                _add_markup_paragraph(
+                    doc,
+                    str(item.get("duration") or "").strip(),
+                    size=10,
+                    space_after=3,
+                )
+
+        if idx < len(sections) - 1:
+            doc.add_paragraph().paragraph_format.space_after = Pt(6)
 
     out = BytesIO()
     doc.save(out)

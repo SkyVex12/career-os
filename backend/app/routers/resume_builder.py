@@ -14,10 +14,14 @@ from sqlalchemy.orm import Session
 
 from ..auth import Principal, get_principal
 from ..db import SessionLocal
-from ..models import AdminUser, BaseResume, JDKeyInfo, StoredFile, User
-from ..resume_docx import replace_bullets_in_docx, replace_summary_in_docx
-from ..pdf import resume_to_pdf_bytes
-from ..ai import tailor_rewrite_resume
+from ..models import AdminUser, AuthCredential, BaseResume, JDKeyInfo, StoredFile, User
+from ..resume_docx import (
+    build_resume_docx_bytes,
+    replace_bullets_in_docx,
+    replace_summary_in_docx,
+)
+from ..pdf import build_resume_pdf_bytes, resume_to_pdf_bytes
+from ..ai import generate_resume_from_scratch, normalize_imported_resume, tailor_rewrite_resume
 from ..services.pdf_service import docx_bytes_to_pdf_bytes
 
 router = APIRouter()
@@ -151,6 +155,151 @@ class TailorBulletsOut(BaseModel):
     gaps: List[str]
     summary: str = ""
     cover_letter: str = ""
+
+
+class GenerateResumeFromScratchIn(BaseModel):
+    user_id: str
+    jd_text: str = Field(..., min_length=20)
+    company: str = ""
+    position: str = ""
+    export_format: str = Field(default="both", description="docx | pdf | both")
+    include_cover_letter: bool = True
+    resume_json_text: str = ""
+
+
+def _generate_resume_bundle(
+    payload: GenerateResumeFromScratchIn,
+    db: Session,
+    principal: Principal,
+) -> Dict[str, Any]:
+    _check_access(db, principal, payload.user_id)
+
+    if (payload.resume_json_text or "").strip():
+        try:
+            generated = normalize_imported_resume(
+                resume_data=json.loads(payload.resume_json_text),
+                position=payload.position,
+                include_cover_letter=payload.include_cover_letter,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid resume_json_text: {exc}")
+    else:
+        generated = generate_resume_from_scratch(
+            jd_text=payload.jd_text,
+            company=payload.company,
+            position=payload.position,
+            include_cover_letter=payload.include_cover_letter,
+        )
+
+    if generated.get("blocked"):
+        out = {
+            "ok": False,
+            "blocked": True,
+            "block_reason": generated.get("block_reason") or "Resume generation blocked",
+            "resume_json": generated,
+        }
+        if payload.include_cover_letter:
+            out["cover_letter"] = ""
+        return out
+
+    user = db.query(User).filter(User.id == payload.user_id).first()
+    cred = (
+        db.query(AuthCredential)
+        .filter(
+            AuthCredential.principal_type == "user",
+            AuthCredential.principal_id == payload.user_id,
+        )
+        .first()
+    )
+    generated["candidate"] = _build_candidate_header(user, cred.email if cred else None)
+
+    docx_bytes = build_resume_docx_bytes(generated)
+    pdf_bytes = build_resume_pdf_bytes(generated)
+
+    docx_b64 = base64.b64encode(docx_bytes).decode("utf-8")
+    pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
+    fmt = (payload.export_format or "both").lower().strip()
+    if fmt not in ("docx", "pdf", "both"):
+        raise HTTPException(
+            status_code=400, detail="export_format must be one of: docx, pdf, both"
+        )
+
+    if fmt == "both":
+        buf = BytesIO()
+        filenames = ["resume.docx", "resume.pdf"]
+        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("resume.docx", docx_bytes)
+            z.writestr("resume.pdf", pdf_bytes)
+            if (generated.get("cover_letter") or "").strip():
+                z.writestr("cover_letter.txt", generated["cover_letter"].strip() + "\n")
+                filenames.append("cover_letter.txt")
+        return {
+            "ok": True,
+            "blocked": False,
+            "bundle_zip_base64": base64.b64encode(buf.getvalue()).decode("utf-8"),
+            "bundle_filenames": filenames,
+            "resume_json": generated,
+            **(
+                {"cover_letter": generated.get("cover_letter") or ""}
+                if payload.include_cover_letter
+                else {}
+            ),
+        }
+
+    if fmt == "pdf":
+        return {
+            "ok": True,
+            "blocked": False,
+            "resume_pdf_base64": pdf_b64,
+            "resume_json": generated,
+            **(
+                {"cover_letter": generated.get("cover_letter") or ""}
+                if payload.include_cover_letter
+                else {}
+            ),
+        }
+
+    return {
+        "ok": True,
+        "blocked": False,
+        "resume_docx_base64": docx_b64,
+        "resume_json": generated,
+        **(
+            {"cover_letter": generated.get("cover_letter") or ""}
+            if payload.include_cover_letter
+            else {}
+        ),
+    }
+
+
+@router.post("/v1/resume/generate")
+def generate_resume_from_jd(
+    payload: GenerateResumeFromScratchIn,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    return _generate_resume_bundle(payload, db, principal)
+
+
+def _build_candidate_header(user: User | None, email: str | None) -> Dict[str, Any]:
+    if user is None:
+        return {"name": "", "contact_items": []}
+
+    name = (user.name or f"{user.first_name or ''} {user.last_name or ''}".strip()).strip()
+    contact_items: List[Dict[str, str]] = []
+    if (user.phone or "").strip():
+        contact_items.append({"label": (user.phone or "").strip(), "text": (user.phone or "").strip()})
+    if (email or "").strip():
+        contact_items.append({"label": (email or "").strip(), "text": (email or "").strip(), "url": f"mailto:{(email or '').strip()}"})
+    if (user.location or "").strip():
+        contact_items.append({"label": (user.location or "").strip(), "text": (user.location or "").strip()})
+    if (user.linkedin_url or "").strip():
+        contact_items.append({"label": "LinkedIn", "text": "LinkedIn", "url": (user.linkedin_url or "").strip()})
+    if (user.github_url or "").strip():
+        contact_items.append({"label": "GitHub", "text": "GitHub", "url": (user.github_url or "").strip()})
+    if (user.portfolio_url or "").strip():
+        contact_items.append({"label": "Portfolio", "text": "Portfolio", "url": (user.portfolio_url or "").strip()})
+    return {"name": name, "contact_items": contact_items}
 
 
 # ---------------------------

@@ -24,9 +24,25 @@ class UserOut(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     dob: Optional[str] = None
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    github_url: Optional[str] = None
+    portfolio_url: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class UserProfilePatch(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    dob: Optional[str] = None
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    github_url: Optional[str] = None
+    portfolio_url: Optional[str] = None
 
 
 @router.get("/users")
@@ -49,6 +65,41 @@ def list_users(
         if not u:
             return {"items": []}
         return {"items": [UserOut.model_validate(u).model_dump()]}
+
+
+@router.patch("/users/{user_id}/profile")
+def update_user_profile(
+    user_id: str,
+    payload: UserProfilePatch,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    if principal.type == "user":
+        if principal.id != user_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
+    else:
+        if (
+            db.query(AdminUser)
+            .filter(AdminUser.admin_id == principal.id, AdminUser.user_id == user_id)
+            .first()
+            is None
+        ):
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(user, field, value)
+
+    if any(k in updates for k in ("first_name", "last_name")):
+        user.name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.name
+    user.updated_at = dt.datetime.now()
+    db.commit()
+    db.refresh(user)
+    return {"user": UserOut.model_validate(user).model_dump()}
 
 
 class AdminCreateUserIn(BaseModel):

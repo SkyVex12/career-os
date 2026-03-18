@@ -19,6 +19,23 @@ def _is_sqlite() -> bool:
         return False
 
 
+def _ensure_user_profile_columns() -> None:
+    cols = {
+        "phone": "TEXT",
+        "location": "TEXT",
+        "linkedin_url": "TEXT",
+        "github_url": "TEXT",
+        "portfolio_url": "TEXT",
+    }
+    dialect = engine.dialect.name
+    with engine.begin() as conn:
+        for col, col_type in cols.items():
+            if dialect == "postgresql":
+                conn.execute(
+                    text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {col_type};")
+                )
+
+
 def ensure_schema() -> None:
     """Ensure schema exists (SQLite or Postgres)."""
     # Create tables for any DB
@@ -48,6 +65,8 @@ def ensure_schema() -> None:
             conn.commit()
         finally:
             conn.close()
+    else:
+        _ensure_user_profile_columns()
 
     # Optional seed (works for Postgres too)
     # NOTE: You may want to disable seeding in production.

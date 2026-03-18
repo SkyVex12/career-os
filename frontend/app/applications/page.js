@@ -14,6 +14,82 @@ function stageNormalize(s) {
   return STAGES.includes(v) ? v : "applied";
 }
 
+function ResumeDownloadMenu({ app }) {
+  const hasPdf = Boolean(app?.resume_pdf_download_url);
+  const hasDocx = Boolean(app?.resume_docx_download_url);
+
+  if (!hasPdf && !hasDocx) {
+    return <span className="small muted">-</span>;
+  }
+
+  const optionStyle = {
+    display: "block",
+    padding: "8px 10px",
+    borderRadius: 10,
+    textDecoration: "none",
+    color: "inherit",
+    background: "rgba(255,255,255,.04)",
+  };
+
+  return (
+    <details style={{ position: "relative", display: "inline-block" }}>
+      <summary
+        style={{
+          cursor: "pointer",
+          color: "var(--link, #7dd3fc)",
+          listStyle: "none",
+        }}
+      >
+        Resume
+      </summary>
+      <div
+        className="card"
+        style={{
+          position: "absolute",
+          top: "calc(100% + 8px)",
+          right: 0,
+          minWidth: 120,
+          padding: 8,
+          zIndex: 5,
+        }}
+      >
+        {hasPdf ? (
+          <a
+            href={app.resume_pdf_download_url}
+            target="_blank"
+            rel="noreferrer"
+            style={optionStyle}
+            onClick={() =>
+              track("Resume Downloaded", {
+                appId: app.id,
+                type: "pdf",
+              })
+            }
+          >
+            PDF
+          </a>
+        ) : null}
+        {hasDocx ? (
+          <a
+            href={app.resume_docx_download_url}
+            target="_blank"
+            rel="noreferrer"
+            style={{ ...optionStyle, marginTop: hasPdf ? 6 : 0 }}
+            onClick={() =>
+              track("Resume Downloaded", {
+                appId: app.id,
+                type: "docx",
+              })
+            }
+          >
+            DOCX
+          </a>
+        ) : null}
+      </div>
+    </details>
+  );
+}
+
 export default function ApplicationsPage() {
   const [view, setView] = useState("kanban"); // kanban | list
   // list state
@@ -570,17 +646,7 @@ export default function ApplicationsPage() {
                           : "-"}
                       </td>
                       <td>
-                        {a.resume_docx_download_url ? (
-                          <a
-                            href={a.resume_docx_download_url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            resume
-                          </a>
-                        ) : (
-                          <span className="small muted">—</span>
-                        )}
+                        <ResumeDownloadMenu app={a} />
                       </td>
                       <td>
                         {a.url ? (
@@ -844,24 +910,7 @@ export default function ApplicationsPage() {
                           <div
                             style={{ display: "flex", gap: 10, fontSize: 14 }}
                           >
-                            {a.resume_pdf_download_url ||
-                            a.resume_docx_download_url ? (
-                              <a
-                                onClick={() =>
-                                  track("Resume Downloaded", {
-                                    appId: a.id,
-                                    type: "docx",
-                                  })
-                                }
-                                href={a.resume_docx_download_url}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Resume
-                              </a>
-                            ) : (
-                              <span className="muted">—</span>
-                            )}
+                            <ResumeDownloadMenu app={a} />
                             {a.url ? (
                               <a href={a.url} target="_blank" rel="noreferrer">
                                 Open
