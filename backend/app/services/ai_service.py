@@ -418,14 +418,13 @@ def normalize_imported_resume(
         data.setdefault("cover_letter", "")
     else:
         data.pop("cover_letter", None)
-    validated = GeneratedResumeResult.model_validate({**data, "cover_letter": data.get("cover_letter", "")})
-    normalized = _normalize_generated_resume(
-        validated.model_dump(),
-        position=position,
+    validated = GeneratedResumeResult.model_validate(
+        {**data, "cover_letter": data.get("cover_letter", "")}
     )
+    imported = validated.model_dump()
     if not include_cover_letter:
-        normalized.pop("cover_letter", None)
-    return normalized
+        imported.pop("cover_letter", None)
+    return imported
 
 
 def _normalize_generated_resume(
