@@ -24,3 +24,5 @@ Thumbs.db
 # Data
 data/
 storage/
+
+setup-gcp.sh
