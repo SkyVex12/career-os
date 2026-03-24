@@ -7,7 +7,7 @@ import zipfile
 from io import BytesIO
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from sqlalchemy.orm import Session
@@ -54,6 +54,104 @@ class ApplyAndGenerateIn(BaseModel):
     jd_text: str = ""
     have_to_generate: bool = True
     resume_json_text: Optional[str] = None
+
+
+@router.post("/ingest/upload-tailored-resume")
+async def upload_tailored_resume(
+    application_id: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    app_row = db.get(Application, application_id)
+    if not app_row:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    _ensure_access(db, principal, app_row.user_id)
+
+    filename = (file.filename or "").strip()
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    allowed = {
+        ".pdf": ("resume_pdf", "application/pdf"),
+        # Keep Word uploads under the existing resume_docx kind so current
+        # application listing code continues to expose the uploaded resume.
+        ".doc": ("resume_docx", "application/msword"),
+        ".docx": (
+            "resume_docx",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ),
+    }
+    if ext not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail="Only .pdf, .doc, and .docx resume files are supported",
+        )
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    now = dt.datetime.now()
+    resume_kind, mime = allowed[ext]
+    resume_version_id = (
+        f"manual_edit_{app_row.id}_{now.strftime('%Y%m%d%H%M%S')}{now.microsecond}"
+    )
+    resume_version = ResumeVersion(
+        id=resume_version_id,
+        user_id=app_row.user_id,
+        application_id=app_row.id,
+        jd_key_id=None,
+        schema_version="manual_upload_v1",
+        tailored_json="{}",
+        created_at=now,
+    )
+    db.add(resume_version)
+
+    (
+        db.query(StoredFile)
+        .filter(
+            StoredFile.application_id == app_row.id,
+            StoredFile.kind.in_(["resume_docx", "resume_pdf"]),
+        )
+        .delete(synchronize_session=False)
+    )
+
+    user = db.get(User, app_row.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    file_id = f"file{now.strftime('%Y%m%d%H%M%S')}{now.microsecond}"
+    rel_path = save_bytes(
+        f"{user.name or user.id}-{user.id}",
+        app_row.id,
+        f"{file_id}{ext}",
+        data,
+    )
+    stored = StoredFile(
+        id=file_id,
+        user_id=app_row.user_id,
+        application_id=app_row.id,
+        resume_version_id=resume_version_id,
+        kind=resume_kind,
+        path=rel_path,
+        filename=filename or f"resume{ext}",
+        mime=mime,
+        created_at=now,
+    )
+    db.add(stored)
+
+    app_row.updated_at = now
+    db.commit()
+
+    return {
+        "application_id": app_row.id,
+        "resume_version_id": resume_version_id,
+        "stored_file_id": file_id,
+        "kind": resume_kind,
+        "filename": stored.filename,
+        "mime": mime,
+        "download_url": f"/v1/files/{file_id}/download",
+    }
 
 
 @router.post("/ingest/apply-and-generate")
