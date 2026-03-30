@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+from io import BytesIO
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+import requests
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, EmailStr, Field
+from docx import Document
 
 from sqlalchemy.orm import Session
 
@@ -167,12 +170,167 @@ from ..models import BaseResume
 from ..models import StoredFile
 from ..storage import save_bytes, safe_filename
 from ..resume_docx import extract_resume_json_from_docx
+from ..services.pdf_service import docx_bytes_to_pdf_bytes
 
 from fastapi import UploadFile, File
 
 
 class BaseResumeIn(BaseModel):
     content_text: str = Field(..., min_length=20)
+
+
+def _ensure_user_access(db: Session, principal: Principal, user_id: str) -> None:
+    if principal.type == "user":
+        if principal.id != user_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        return
+    if (
+        db.query(AdminUser)
+        .filter(AdminUser.admin_id == principal.id, AdminUser.user_id == user_id)
+        .first()
+        is None
+    ):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+def _get_assigned_resume_template(db: Session, user_id: str) -> StoredFile | None:
+    return (
+        db.query(StoredFile)
+        .filter(
+            StoredFile.user_id == user_id,
+            StoredFile.application_id == "base",
+            StoredFile.kind == "resume_template_docx",
+        )
+        .order_by(StoredFile.created_at.desc())
+        .first()
+    )
+
+
+def _extract_template_preview(sf: StoredFile) -> dict:
+    try:
+        resp = requests.get(sf.path, timeout=30)
+        resp.raise_for_status()
+        doc = Document(BytesIO(resp.content))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to read assigned DOCX template")
+
+    lines: list[str] = []
+    for paragraph in doc.paragraphs:
+        text = " ".join((paragraph.text or "").split()).strip()
+        if text:
+            lines.append(text)
+        if len(lines) >= 12:
+            break
+
+    if len(lines) < 12:
+        for table in doc.tables:
+            for row in table.rows:
+                values = []
+                for cell in row.cells:
+                    text = " ".join(cell.text.split()).strip()
+                    if text:
+                        values.append(text)
+                if values:
+                    lines.append(" | ".join(values))
+                if len(lines) >= 12:
+                    break
+            if len(lines) >= 12:
+                break
+
+    return {
+        "filename": sf.filename,
+        "line_count": len(lines),
+        "lines": lines,
+    }
+
+
+def _read_stored_docx(sf: StoredFile) -> bytes:
+    try:
+        resp = requests.get(sf.path, timeout=30)
+        resp.raise_for_status()
+        return resp.content
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to read assigned DOCX template")
+
+
+@router.put("/users/{user_id}/resume-template-docx")
+async def put_resume_template_docx(
+    user_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    _ensure_user_access(db, principal, user_id)
+
+    if not (file.filename or "").lower().endswith(".docx"):
+        raise HTTPException(status_code=400, detail="Only .docx files are supported")
+
+    data = await file.read()
+    if not data or len(data) < 1000:
+        raise HTTPException(status_code=400, detail="Invalid DOCX")
+
+    now = dt.datetime.now()
+    filename = safe_filename(file.filename) or "resume_template.docx"
+    path = save_bytes(user_id, "base", filename, data)
+    sf = StoredFile(
+        id=f"resume_template_{user_id}_{now.strftime('%Y%m%d%H%M%S')}{now.microsecond}",
+        user_id=user_id,
+        application_id="base",
+        kind="resume_template_docx",
+        path=path,
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=filename,
+        created_at=now,
+    )
+    db.add(sf)
+    db.commit()
+    return {
+        "ok": True,
+        "user_id": user_id,
+        "stored_file_id": sf.id,
+        "filename": sf.filename,
+        "updated_at": now.isoformat(),
+    }
+
+
+@router.get("/users/{user_id}/resume-template-preview")
+def get_resume_template_preview(
+    user_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    _ensure_user_access(db, principal, user_id)
+    sf = _get_assigned_resume_template(db, user_id)
+    if not sf:
+        raise HTTPException(status_code=404, detail="Resume template not found")
+    return {
+        "user_id": user_id,
+        "stored_file_id": sf.id,
+        **_extract_template_preview(sf),
+    }
+
+
+@router.get("/users/{user_id}/resume-template-preview.pdf")
+def get_resume_template_preview_pdf(
+    user_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    _ensure_user_access(db, principal, user_id)
+    sf = _get_assigned_resume_template(db, user_id)
+    if not sf:
+        raise HTTPException(status_code=404, detail="Resume template not found")
+
+    docx_bytes = _read_stored_docx(sf)
+    try:
+        pdf_bytes = docx_bytes_to_pdf_bytes(docx_bytes)
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate PDF preview for the assigned template",
+        )
+
+    return Response(content=pdf_bytes, media_type="application/pdf")
 
 
 @router.put("/users/{user_id}/base-resume-docx")
@@ -189,18 +347,7 @@ async def put_base_resume_docx(
       while keeping the original template/format.
     """
 
-    # access: user self or admin linked
-    if principal.type == "user":
-        if principal.id != user_id:
-            raise HTTPException(status_code=403, detail="Forbidden")
-    else:
-        if (
-            db.query(AdminUser)
-            .filter(AdminUser.admin_id == principal.id, AdminUser.user_id == user_id)
-            .first()
-            is None
-        ):
-            raise HTTPException(status_code=403, detail="Forbidden")
+    _ensure_user_access(db, principal, user_id)
 
     if not file.filename.lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="Only .docx files are supported")
@@ -268,18 +415,7 @@ def put_base_resume(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ):
-    # access: user self or admin linked
-    if principal.type == "user":
-        if principal.id != user_id:
-            raise HTTPException(status_code=403, detail="Forbidden")
-    else:
-        if (
-            db.query(AdminUser)
-            .filter(AdminUser.admin_id == principal.id, AdminUser.user_id == user_id)
-            .first()
-            is None
-        ):
-            raise HTTPException(status_code=403, detail="Forbidden")
+    _ensure_user_access(db, principal, user_id)
 
     now = dt.datetime.now()
     row = db.get(BaseResume, user_id)
@@ -305,22 +441,16 @@ def get_base_resume(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ):
-    if principal.type == "user":
-        if principal.id != user_id:
-            raise HTTPException(status_code=403, detail="Forbidden")
-    else:
-        if (
-            db.query(AdminUser)
-            .filter(AdminUser.admin_id == principal.id, AdminUser.user_id == user_id)
-            .first()
-            is None
-        ):
-            raise HTTPException(status_code=403, detail="Forbidden")
+    _ensure_user_access(db, principal, user_id)
 
     br = db.get(BaseResume, user_id)
+    template = _get_assigned_resume_template(db, user_id)
     return {
         "user_id": user_id,
         "content_text": br.content_text if br else "",
+        "resume_template_file_id": template.id if template else None,
+        "resume_template_filename": template.filename if template else None,
+        "resume_template_uploaded": bool(template),
         "updated_at": br.updated_at.isoformat() if br else None,
     }
 
@@ -329,6 +459,9 @@ class BaseResumeListItem(BaseModel):
     user_id: str
     title: str | None = None
     content_text: str = ""
+    resume_template_file_id: str | None = None
+    resume_template_filename: str | None = None
+    resume_template_uploaded: bool = False
     updated_at: str | None = None
 
 
@@ -353,11 +486,15 @@ def list_base_resumes(
         )
         items = []
         for u, br in rows:
+            template = _get_assigned_resume_template(db, u.id)
             items.append(
                 {
                     "user_id": u.id,
                     "title": u.name or u.id,
                     "content_text": br.content_text if br else "",
+                    "resume_template_file_id": template.id if template else None,
+                    "resume_template_filename": template.filename if template else None,
+                    "resume_template_uploaded": bool(template),
                     "updated_at": br.updated_at.isoformat() if br else None,
                 }
             )
@@ -365,12 +502,16 @@ def list_base_resumes(
     else:
         u = db.query(User).filter(User.id == principal.id).first()
         br = db.get(BaseResume, principal.id)
+        template = _get_assigned_resume_template(db, principal.id)
         return {
             "items": [
                 {
                     "user_id": principal.id,
                     "title": (u.name if u else None) or principal.id,
                     "content_text": br.content_text if br else "",
+                    "resume_template_file_id": template.id if template else None,
+                    "resume_template_filename": template.filename if template else None,
+                    "resume_template_uploaded": bool(template),
                     "updated_at": br.updated_at.isoformat() if br else None,
                 }
             ]

@@ -4,6 +4,7 @@ import os
 
 
 def docx_bytes_to_pdf_bytes(docx_bytes: bytes) -> bytes:
+    soffice_bin = os.getenv("SOFFICE_PATH", "soffice")
     with tempfile.TemporaryDirectory() as tmp:
         docx_path = os.path.join(tmp, "resume.docx")
         pdf_path = os.path.join(tmp, "resume.pdf")
@@ -13,7 +14,7 @@ def docx_bytes_to_pdf_bytes(docx_bytes: bytes) -> bytes:
 
         subprocess.run(
             [
-                "soffice",
+                soffice_bin,
                 "--headless",
                 "--convert-to",
                 "pdf",

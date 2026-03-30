@@ -1,27 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { apiFetch } from "../lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { apiFetch, getToken } from "../lib/api";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
+
 export default function DocumentsPage() {
-  // This page is the Base Resume editor (backed by the base_resumes table).
-  const [items, setItems] = useState([]); // { user_id, title, content_text, updated_at }
+  const [items, setItems] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState(null);
-  const [content, setContent] = useState("");
+  const [templatePreviewUrl, setTemplatePreviewUrl] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [uploadingTemplate, setUploadingTemplate] = useState(false);
   const [error, setError] = useState(null);
 
   async function refresh() {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiFetch(`/v1/base-resumes`);
+      const data = await apiFetch("/v1/base-resumes");
       const next = data?.items || [];
       setItems(next);
-      // Auto-select first user in list
       if (!selectedUserId && next.length > 0) {
         setSelectedUserId(next[0].user_id);
-        setContent(next[0].content_text || "");
       }
     } catch (e) {
       setError(e?.message || String(e));
@@ -34,37 +35,82 @@ export default function DocumentsPage() {
     refresh();
   }, []);
 
+  const selectedItem = useMemo(
+    () => items.find((x) => x.user_id === selectedUserId) || null,
+    [items, selectedUserId]
+  );
+
   useEffect(() => {
-    // When switching user (or list refreshes), update editor content from the list.
-    const row = items.find((x) => x.user_id === selectedUserId);
-    if (row) setContent(row.content_text || "");
+    async function loadPreview() {
+      if (!selectedUserId) {
+        setTemplatePreviewUrl("");
+        return;
+      }
+      const item = items.find((x) => x.user_id === selectedUserId);
+      if (!item?.resume_template_uploaded) {
+        setTemplatePreviewUrl("");
+        return;
+      }
+      setPreviewLoading(true);
+      try {
+        const token = getToken();
+        const res = await fetch(
+          `${API_BASE}/v1/users/${selectedUserId}/resume-template-preview.pdf`,
+          {
+            headers: token ? { "X-Auth-Token": token } : {},
+            cache: "no-store",
+          }
+        );
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(text || `HTTP ${res.status}`);
+        }
+        const blob = await res.blob();
+        setTemplatePreviewUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(blob);
+        });
+      } catch (e) {
+        setTemplatePreviewUrl("");
+        setError(e?.message || String(e));
+      } finally {
+        setPreviewLoading(false);
+      }
+    }
+
+    loadPreview();
   }, [selectedUserId, items]);
 
-  function preview(text, n = 180) {
-    const t = (text || "").trim().replace(/\s+/g, " ");
-    return t.length <= n ? t : t.slice(0, n) + "…";
-  }
+  useEffect(() => {
+    return () => {
+      if (templatePreviewUrl) {
+        URL.revokeObjectURL(templatePreviewUrl);
+      }
+    };
+  }, [templatePreviewUrl]);
 
-  async function save() {
-    if (!selectedUserId) return;
-    setSaving(true);
+  async function uploadTemplate(file) {
+    if (!selectedUserId || !file) return;
+    setUploadingTemplate(true);
     setError(null);
     try {
-      await apiFetch(`/v1/users/${selectedUserId}/base-resume`, {
+      const form = new FormData();
+      form.append("file", file);
+      await apiFetch(`/v1/users/${selectedUserId}/resume-template-docx`, {
         method: "PUT",
-        body: JSON.stringify({ content_text: content }),
+        body: form,
       });
       await refresh();
     } catch (e) {
       setError(e?.message || String(e));
     } finally {
-      setSaving(false);
+      setUploadingTemplate(false);
     }
   }
 
   return (
-    <div style={{ maxWidth: 1100 }}>
-      <h1>Base Resumes</h1>
+    <div style={{ maxWidth: 980 }}>
+      <h1>Resume Templates</h1>
 
       {error && (
         <div
@@ -84,12 +130,11 @@ export default function DocumentsPage() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "360px 1fr",
+          gridTemplateColumns: "340px 1fr",
           gap: 16,
           alignItems: "start",
         }}
       >
-        {/* List */}
         <div
           style={{
             border: "1px solid rgba(255,255,255,0.08)",
@@ -105,18 +150,14 @@ export default function DocumentsPage() {
               marginBottom: 10,
             }}
           >
-            <strong>Resumes list</strong>
-            <button
-              className="btn btnGhost"
-              onClick={refresh}
-              disabled={loading}
-            >
-              {loading ? "Loading…" : "Refresh"}
+            <strong>Users</strong>
+            <button className="btn btnGhost" onClick={refresh} disabled={loading}>
+              {loading ? "Loading..." : "Refresh"}
             </button>
           </div>
 
           {items.length === 0 && !loading && (
-            <div style={{ color: "#8aa" }}>No users / base resumes yet.</div>
+            <div style={{ color: "#8aa" }}>No users available yet.</div>
           )}
 
           <div style={{ display: "grid", gap: 10 }}>
@@ -141,8 +182,11 @@ export default function DocumentsPage() {
                   }}
                 >
                   <div style={{ fontWeight: 600 }}>{x.title || x.user_id}</div>
-                  <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6 }}>
-                    {preview(x.content_text)}
+                  <div style={{ fontSize: 12, opacity: 0.74, marginTop: 4 }}>
+                    Template:{" "}
+                    {x.resume_template_uploaded
+                      ? x.resume_template_filename || "Uploaded"
+                      : "Not uploaded"}
                   </div>
                 </button>
               );
@@ -150,53 +194,74 @@ export default function DocumentsPage() {
           </div>
         </div>
 
-        {/* Editor */}
         <div
           style={{
             border: "1px solid rgba(255,255,255,0.08)",
             borderRadius: 12,
-            padding: 12,
+            padding: 16,
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 10,
-              marginBottom: 10,
-            }}
-          >
-            <div>
-              <strong>Base resume</strong>
-              {selectedUserId && (
-                <span style={{ marginLeft: 8, opacity: 0.7, fontSize: 12 }}>
-                  ({selectedUserId})
-                </span>
-              )}
-            </div>
-            <button
-              className="btn btnGhost"
-              onClick={save}
-              disabled={saving || !selectedUserId}
-            >
-              {saving ? "Saving…" : "Save / Update"}
-            </button>
+          <div style={{ marginBottom: 12 }}>
+            <strong>Assigned DOCX template</strong>
+            {selectedUserId && (
+              <span style={{ marginLeft: 8, opacity: 0.7, fontSize: 12 }}>
+                ({selectedUserId})
+              </span>
+            )}
           </div>
 
-          <textarea
-            rows={18}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Paste the base resume here…"
-            style={{ width: "100%" }}
-          />
+          <div
+            style={{
+              padding: 14,
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background: "rgba(255,255,255,0.03)",
+            }}
+          >
+            <div style={{ fontSize: 13, opacity: 0.82, marginBottom: 12 }}>
+              {selectedItem?.resume_template_uploaded
+                ? `Current file: ${selectedItem.resume_template_filename || "Uploaded DOCX"}`
+                : "No template uploaded yet. Apply-and-generate will use the default renderer until you assign a DOCX template."}
+            </div>
 
-          <div style={{ marginTop: 8, fontSize: 12, opacity: 0.75 }}>
-            This updates the base_resumes table via
-            <code style={{ marginLeft: 6 }}>
-              /v1/users/&lt;user_id&gt;/base-resume
-            </code>
+            <input
+              type="file"
+              accept=".docx"
+              disabled={!selectedUserId || uploadingTemplate}
+              onChange={(e) => uploadTemplate(e.target.files?.[0])}
+            />
+
+            {uploadingTemplate && (
+              <div style={{ fontSize: 12, opacity: 0.72, marginTop: 8 }}>
+                Uploading template...
+              </div>
+            )}
+
+            <div style={{ marginTop: 14, fontSize: 12, opacity: 0.82 }}>
+              Template preview
+            </div>
+            <div
+              style={{
+                marginTop: 8,
+                borderRadius: 8,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(0,0,0,0.14)",
+                minHeight: 480,
+                overflow: "hidden",
+              }}
+            >
+              {previewLoading
+                ? "Loading preview..."
+                : templatePreviewUrl
+                  ? (
+                    <iframe
+                      title="Template preview"
+                      src={templatePreviewUrl}
+                      style={{ width: "100%", height: 480, border: 0 }}
+                    />
+                  )
+                  : "Upload one DOCX per user to preview it here."}
+            </div>
           </div>
         </div>
       </div>

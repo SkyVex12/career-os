@@ -2,10 +2,11 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 const TOKEN = process.env.NEXT_PUBLIC_EXTENSION_TOKEN || "";
 
 async function request(path, init = {}) {
+  const isFormData = typeof FormData !== "undefined" && init.body instanceof FormData;
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(TOKEN ? { "X-Extension-Token": TOKEN } : {}),
       ...(init.headers || {}),
     },

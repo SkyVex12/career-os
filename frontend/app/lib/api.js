@@ -17,7 +17,8 @@ export async function api(path, options = {}) {
   const url = path.startsWith("http") ? path : base + path;
 
   const headers = new Headers(options.headers || {});
-  if (!headers.has("Content-Type") && options.body)
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  if (!headers.has("Content-Type") && options.body && !isFormData)
     headers.set("Content-Type", "application/json");
 
   const tok = getToken();

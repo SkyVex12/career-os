@@ -20,6 +20,7 @@ from ..resume_docx import (
     replace_bullets_in_docx,
     replace_summary_in_docx,
 )
+from ..resume_template_docx import render_resume_template_docx_bytes
 from ..pdf import build_resume_pdf_bytes, resume_to_pdf_bytes
 from ..ai import generate_resume_from_scratch, normalize_imported_resume, tailor_rewrite_resume
 from ..services.pdf_service import docx_bytes_to_pdf_bytes
@@ -135,6 +136,62 @@ def _load_base_resume_json(br: BaseResume) -> Dict[str, Any]:
     }
 
 
+def _get_resume_template_file(db: Session, user_id: str) -> StoredFile | None:
+    return (
+        db.query(StoredFile)
+        .filter(
+            StoredFile.user_id == user_id,
+            StoredFile.application_id == "base",
+            StoredFile.kind == "resume_template_docx",
+        )
+        .order_by(StoredFile.created_at.desc())
+        .first()
+    )
+
+
+def _read_stored_docx_bytes(sf: StoredFile) -> bytes:
+    try:
+        resp = requests.get(sf.path, timeout=30)
+        resp.raise_for_status()
+        return resp.content
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to read stored DOCX template")
+
+
+def _tailored_resume_json(base_resume: Dict[str, Any], tailored: TailorBulletsOut) -> Dict[str, Any]:
+    resume = json.loads(json.dumps(base_resume))
+    if (tailored.summary or "").strip():
+        resume["summary"] = tailored.summary
+
+    experience_map = resume.get("experiences") or []
+    for idx, selected in enumerate(tailored.selected_experiences):
+        if idx >= len(experience_map):
+            continue
+        target = experience_map[idx]
+        bullets = selected.get("bullets") or []
+        if "sentences" in target:
+            target["sentences"] = bullets
+        else:
+            target["bullets"] = bullets
+    return resume
+
+
+def _ensure_resume_identity_fields(
+    resume: Dict[str, Any],
+    user: User | None,
+    email: str | None,
+) -> Dict[str, Any]:
+    out = json.loads(json.dumps(resume))
+    out["candidate"] = _build_candidate_header(user, email)
+    if not (out.get("job_title") or "").strip():
+        first_exp = (out.get("experiences") or [{}])[0]
+        out["job_title"] = (
+            str(first_exp.get("job_title") or first_exp.get("title") or "").strip()
+            or "Professional"
+        )
+    return out
+
+
 # ---------------------------
 # API Models
 # ---------------------------
@@ -212,8 +269,12 @@ def _generate_resume_bundle(
         .first()
     )
     generated["candidate"] = _build_candidate_header(user, cred.email if cred else None)
-
-    docx_bytes = build_resume_docx_bytes(generated)
+    template_file = _get_resume_template_file(db, payload.user_id)
+    if template_file:
+        template_bytes = _read_stored_docx_bytes(template_file)
+        docx_bytes = render_resume_template_docx_bytes(template_bytes, generated)
+    else:
+        docx_bytes = build_resume_docx_bytes(generated)
     pdf_bytes = build_resume_pdf_bytes(generated)
 
     docx_b64 = base64.b64encode(docx_bytes).decode("utf-8")
@@ -238,6 +299,7 @@ def _generate_resume_bundle(
             "blocked": False,
             "bundle_zip_base64": base64.b64encode(buf.getvalue()).decode("utf-8"),
             "bundle_filenames": filenames,
+            "template_source": template_file.filename if template_file else None,
             "resume_json": generated,
             **(
                 {"cover_letter": generated.get("cover_letter") or ""}
@@ -251,6 +313,7 @@ def _generate_resume_bundle(
             "ok": True,
             "blocked": False,
             "resume_pdf_base64": pdf_b64,
+            "template_source": template_file.filename if template_file else None,
             "resume_json": generated,
             **(
                 {"cover_letter": generated.get("cover_letter") or ""}
@@ -263,6 +326,7 @@ def _generate_resume_bundle(
         "ok": True,
         "blocked": False,
         "resume_docx_base64": docx_b64,
+        "template_source": template_file.filename if template_file else None,
         "resume_json": generated,
         **(
             {"cover_letter": generated.get("cover_letter") or ""}
@@ -495,6 +559,83 @@ def export_tailored_docx(
         print("br in export+++++++++++++++++")
         raise HTTPException(status_code=404, detail="Base resume not found")
     resume = _load_base_resume_json(br)
+    template_sf = _get_resume_template_file(db, payload.user_id)
+    if template_sf:
+        tailored = tailor_bullets(
+            TailorBulletsIn(
+                user_id=payload.user_id,
+                jd_key_id=payload.jd_key_id,
+                bullets_per_role=payload.bullets_per_role,
+                max_roles=payload.max_roles,
+                include_cover_letter=payload.include_cover_letter,
+                cover_letter_instructions=payload.cover_letter_instructions,
+            ),
+            db=db,
+            principal=principal,
+        )
+        template_bytes = _read_stored_docx_bytes(template_sf)
+        user = db.query(User).filter(User.id == payload.user_id).first()
+        cred = (
+            db.query(AuthCredential)
+            .filter(
+                AuthCredential.principal_type == "user",
+                AuthCredential.principal_id == payload.user_id,
+            )
+            .first()
+        )
+        tailored_resume = _ensure_resume_identity_fields(
+            _tailored_resume_json(resume, tailored),
+            user,
+            cred.email if cred else None,
+        )
+        out_bytes = render_resume_template_docx_bytes(template_bytes, tailored_resume)
+        pdf_bytes = out_bytes
+        docx_b64 = base64.b64encode(out_bytes).decode("utf-8")
+        pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
+
+        fmt = (payload.export_format or "docx").lower().strip()
+        if fmt not in ("docx", "pdf", "both"):
+            raise HTTPException(
+                status_code=400, detail="export_format must be one of: docx, pdf, both"
+            )
+        if fmt == "both":
+            buf = BytesIO()
+            with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                z.writestr("resume.docx", out_bytes)
+                z.writestr("resume.pdf", pdf_bytes)
+                if (tailored.cover_letter or "").strip():
+                    z.writestr("cover_letter.txt", tailored.cover_letter.strip() + "\n")
+            return {
+                "ok": True,
+                "bundle_zip_base64": base64.b64encode(buf.getvalue()).decode("utf-8"),
+                "bundle_filenames": ["resume.docx", "resume.pdf"]
+                + (["cover_letter.txt"] if (tailored.cover_letter or "").strip() else []),
+                "template_source": template_sf.filename,
+                "summary": tailored.summary,
+                "cover_letter": tailored.cover_letter,
+                "selected_experiences": tailored.selected_experiences,
+                "gaps": tailored.gaps,
+            }
+        if fmt == "pdf":
+            return {
+                "ok": True,
+                "resume_pdf_base64": pdf_b64,
+                "template_source": template_sf.filename,
+                "summary": tailored.summary,
+                "cover_letter": tailored.cover_letter,
+                "selected_experiences": tailored.selected_experiences,
+                "gaps": tailored.gaps,
+            }
+        return {
+            "ok": True,
+            "resume_docx_base64": docx_b64,
+            "template_source": template_sf.filename,
+            "summary": tailored.summary,
+            "cover_letter": tailored.cover_letter,
+            "selected_experiences": tailored.selected_experiences,
+            "gaps": tailored.gaps,
+        }
+
     sf = (
         db.query(StoredFile)
         .filter(

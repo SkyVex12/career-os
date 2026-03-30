@@ -257,6 +257,7 @@ def apply_and_generate(
             "application_id": app_row.id,
             "blocked": True,
             "block_reason": data.get("block_reason"),
+            "template_source": data.get("template_source"),
         }
         if payload.include_cover_letter and "cover_letter" in data:
             out["cover_letter"] = data["cover_letter"]
@@ -364,6 +365,7 @@ def apply_and_generate(
     out = {
         "application_id": app_row.id,
         "resume_version_id": rv_id,
+        "template_source": data.get("template_source"),
         "resume_docx_file_id": file_id,
         "resume_pdf_file_id": resume_pdf_file_id,
         "resume_docx_download_url": f"/v1/files/{file_id}/download",
