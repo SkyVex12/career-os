@@ -273,9 +273,10 @@ def _generate_resume_bundle(
     if template_file:
         template_bytes = _read_stored_docx_bytes(template_file)
         docx_bytes = render_resume_template_docx_bytes(template_bytes, generated)
+        pdf_bytes = docx_bytes_to_pdf_bytes(docx_bytes)
     else:
         docx_bytes = build_resume_docx_bytes(generated)
-    pdf_bytes = build_resume_pdf_bytes(generated)
+        pdf_bytes = build_resume_pdf_bytes(generated)
 
     docx_b64 = base64.b64encode(docx_bytes).decode("utf-8")
     pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
@@ -352,17 +353,17 @@ def _build_candidate_header(user: User | None, email: str | None) -> Dict[str, A
     name = (user.name or f"{user.first_name or ''} {user.last_name or ''}".strip()).strip()
     contact_items: List[Dict[str, str]] = []
     if (user.phone or "").strip():
-        contact_items.append({"label": (user.phone or "").strip(), "text": (user.phone or "").strip()})
+        contact_items.append({"kind": "phone", "label": (user.phone or "").strip(), "text": (user.phone or "").strip()})
     if (email or "").strip():
-        contact_items.append({"label": (email or "").strip(), "text": (email or "").strip(), "url": f"mailto:{(email or '').strip()}"})
+        contact_items.append({"kind": "email", "label": (email or "").strip(), "text": (email or "").strip(), "url": f"mailto:{(email or '').strip()}"})
     if (user.location or "").strip():
-        contact_items.append({"label": (user.location or "").strip(), "text": (user.location or "").strip()})
+        contact_items.append({"kind": "address", "label": (user.location or "").strip(), "text": (user.location or "").strip()})
     if (user.linkedin_url or "").strip():
-        contact_items.append({"label": "LinkedIn", "text": "LinkedIn", "url": (user.linkedin_url or "").strip()})
+        contact_items.append({"kind": "linkedin", "label": "LinkedIn", "text": "LinkedIn", "url": (user.linkedin_url or "").strip()})
     if (user.github_url or "").strip():
-        contact_items.append({"label": "GitHub", "text": "GitHub", "url": (user.github_url or "").strip()})
+        contact_items.append({"kind": "github", "label": "GitHub", "text": "GitHub", "url": (user.github_url or "").strip()})
     if (user.portfolio_url or "").strip():
-        contact_items.append({"label": "Portfolio", "text": "Portfolio", "url": (user.portfolio_url or "").strip()})
+        contact_items.append({"kind": "portfolio", "label": "Portfolio", "text": "Portfolio", "url": (user.portfolio_url or "").strip()})
     return {"name": name, "contact_items": contact_items}
 
 
@@ -589,7 +590,7 @@ def export_tailored_docx(
             cred.email if cred else None,
         )
         out_bytes = render_resume_template_docx_bytes(template_bytes, tailored_resume)
-        pdf_bytes = out_bytes
+        pdf_bytes = docx_bytes_to_pdf_bytes(out_bytes)
         docx_b64 = base64.b64encode(out_bytes).decode("utf-8")
         pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
@@ -691,8 +692,7 @@ def export_tailored_docx(
     out_bytes = replace_bullets_in_docx(docx_bytes, bullet_blocks, new_by_block)
 
     # Optional PDF export
-    # pdf_bytes = docx_bytes_to_pdf_bytes(out_bytes)
-    pdf_bytes = out_bytes
+    pdf_bytes = docx_bytes_to_pdf_bytes(out_bytes)
 
     docx_b64 = base64.b64encode(out_bytes).decode("utf-8")
     pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
