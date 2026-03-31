@@ -517,44 +517,49 @@ def _render_experience_block(doc: Document, experiences: List[Dict[str, Any]]) -
 def _render_experience_paragraph_block(doc: Document, experiences: List[Dict[str, Any]]) -> None:
     role_template = _find_paragraph_containing(doc, "[Role1]") or _find_paragraph_containing(doc, "[Date_range1]")
     company_template = _find_paragraph_containing(doc, "[Company1]")
+    duration_template = _find_paragraph_containing(doc, "[Date_range1]")
     bullet_template = _find_paragraph_containing(doc, "[Description1]")
-    if role_template is None or company_template is None or bullet_template is None:
+    if role_template is None or bullet_template is None:
         return
 
-    role_template_xml = role_template._p.xml
-    company_template_xml = company_template._p.xml
+    header_templates: List[Paragraph] = []
+    for paragraph in [role_template, company_template, duration_template]:
+        if paragraph is None:
+            continue
+        if any(existing._p is paragraph._p for existing in header_templates):
+            continue
+        header_templates.append(paragraph)
+    if not header_templates:
+        return
+
+    header_template_xml = [paragraph._p.xml for paragraph in header_templates]
     bullet_template_xml = bullet_template._p.xml
 
     current_anchor = bullet_template
     for exp_idx, exp in enumerate(experiences):
         if exp_idx == 0:
-            role_paragraph = role_template
-            company_paragraph = company_template
+            header_paragraphs = header_templates
             first_bullet = bullet_template
         else:
-            role_paragraph = _paragraph_from_xml(role_template, role_template_xml)
-            current_anchor._p.addnext(role_paragraph._p)
-
-            company_paragraph = _paragraph_from_xml(company_template, company_template_xml)
-            role_paragraph._p.addnext(company_paragraph._p)
+            header_paragraphs = []
+            anchor = current_anchor
+            for paragraph, paragraph_xml in zip(header_templates, header_template_xml):
+                clone = _paragraph_from_xml(paragraph, paragraph_xml)
+                anchor._p.addnext(clone._p)
+                header_paragraphs.append(clone)
+                anchor = clone
 
             first_bullet = _paragraph_from_xml(bullet_template, bullet_template_xml)
-            company_paragraph._p.addnext(first_bullet._p)
+            header_paragraphs[-1]._p.addnext(first_bullet._p)
 
-        _replace_tokens_in_paragraph(
-            role_paragraph,
-            {
-                "[Role1]": exp.get("role") or "",
-                "[Date_range1]": exp.get("duration") or "",
-            },
-        )
-        _replace_tokens_in_paragraph(
-            company_paragraph,
-            {
-                "[Company1]": exp.get("company") or "",
-                "[Company_adress1]": exp.get("location") or "",
-            },
-        )
+        replacements = {
+            "[Role1]": exp.get("role") or "",
+            "[Company1]": exp.get("company") or "",
+            "[Company_adress1]": exp.get("location") or "",
+            "[Date_range1]": exp.get("duration") or "",
+        }
+        for paragraph in header_paragraphs:
+            _replace_tokens_in_paragraph(paragraph, replacements)
 
         bullets = exp.get("bullets") or [""]
         _replace_markup_token_in_paragraph(first_bullet, "[Description1]", bullets[0] if bullets else "")
@@ -622,42 +627,4 @@ def _render_contact_link_block(doc: Document, tokens: List[str], item: Dict[str,
     if item is None:
         return
 
-    text = str(item.get("text") or item.get("label") or "").strip() or "LinkedIn"
-    url = str(item.get("url") or "").strip()
-    if not url:
-        return
-
-    for token in tokens:
-        paragraph = _find_paragraph_containing(doc, token)
-        if paragraph is None:
-            continue
-        original = paragraph.text or ""
-        if token not in original:
-            continue
-        before, after = original.split(token, 1)
-        _clear_paragraph_content(paragraph)
-        _append_plain_run(paragraph, before)
-        _add_hyperlink(paragraph, text, url)
-        _append_plain_run(paragraph, after)
-
-
-def _clear_leftover_placeholders(doc: Document) -> None:
-    used_paragraph_templates: List[str] = [
-        "[Category1]",
-        "[Detail1]",
-        "[Description1]",
-        "[University_name]",
-        "[Degree]",
-        "[Education_date_range]",
-        "[Role1]",
-        "[Company1]",
-        "[Company_adress1]",
-        "[Date_range1]",
-    ]
-    for paragraph in _iter_document_paragraphs(doc):
-        text = paragraph.text or ""
-        if any(token in text for token in used_paragraph_templates):
-            cleaned = text
-            for token in used_paragraph_templates:
-                cleaned = cleaned.replace(token, "")
-            _set_paragraph_text(paragraph, cleaned)
+    text = str(item.get("text") or item.get("label") or "").strip() or "LinkedI
