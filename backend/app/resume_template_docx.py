@@ -627,4 +627,42 @@ def _render_contact_link_block(doc: Document, tokens: List[str], item: Dict[str,
     if item is None:
         return
 
-    text = str(item.get("text") or item.get("label") or "").strip() or "LinkedI
+    text = str(item.get("text") or item.get("label") or "").strip() or "LinkedIn"
+    url = str(item.get("url") or "").strip()
+    if not url:
+        return
+
+    for token in tokens:
+        paragraph = _find_paragraph_containing(doc, token)
+        if paragraph is None:
+            continue
+        original = paragraph.text or ""
+        if token not in original:
+            continue
+        before, after = original.split(token, 1)
+        _clear_paragraph_content(paragraph)
+        _append_plain_run(paragraph, before)
+        _add_hyperlink(paragraph, text, url)
+        _append_plain_run(paragraph, after)
+
+
+def _clear_leftover_placeholders(doc: Document) -> None:
+    used_paragraph_templates: List[str] = [
+        "[Category1]",
+        "[Detail1]",
+        "[Description1]",
+        "[University_name]",
+        "[Degree]",
+        "[Education_date_range]",
+        "[Role1]",
+        "[Company1]",
+        "[Company_adress1]",
+        "[Date_range1]",
+    ]
+    for paragraph in _iter_document_paragraphs(doc):
+        text = paragraph.text or ""
+        if any(token in text for token in used_paragraph_templates):
+            cleaned = text
+            for token in used_paragraph_templates:
+                cleaned = cleaned.replace(token, "")
+            _set_paragraph_text(paragraph, cleaned)
