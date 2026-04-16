@@ -31,6 +31,8 @@ _THREADS: Dict[str, Dict[str, Any]] = {}
 _ASSISTANT_MODEL = os.getenv("OPENAI_ASSISTANT_MODEL", "gpt-4.1-mini")
 _MAX_CONTEXT_MESSAGES = 12
 _MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)", re.IGNORECASE)
+_VIEW_JD_LINK_RE = re.compile(r"\[View JD\]\(([^)]+)\)", re.IGNORECASE)
+_REPLY_LINK_RE = re.compile(r"\[Reply via email\]\((mailto:[^)]+)\)", re.IGNORECASE)
 
 
 class ThreadOut(BaseModel):
@@ -350,25 +352,81 @@ def _build_reply_mailto(line: str, fact: Dict[str, Optional[str]]) -> Optional[s
 
 def _line_has_jd_link(line: str, jd_url: Optional[str]) -> bool:
     if not line or not jd_url:
-        return False
+        return bool(_VIEW_JD_LINK_RE.search(line)) if line else False
     jd_url = jd_url.strip()
-    for label, url in _MARKDOWN_LINK_RE.findall(line):
-        if (label or "").strip().lower() == "view jd":
+    for match in _VIEW_JD_LINK_RE.finditer(line):
+        if (match.group(1) or "").strip() == jd_url:
             return True
-        if (url or "").strip() == jd_url:
-            return True
-    return False
+    return bool(_VIEW_JD_LINK_RE.search(line))
 
 
 def _line_has_reply_link(line: str) -> bool:
     if not line:
         return False
-    for label, url in _MARKDOWN_LINK_RE.findall(line):
-        if (label or "").strip().lower() == "reply via email":
-            return True
-        if (url or "").strip().lower().startswith("mailto:"):
-            return True
-    return False
+    return bool(_REPLY_LINK_RE.search(line) or re.search(r"mailto:", line, re.IGNORECASE))
+
+
+def _dedupe_view_jd_links(line: str) -> str:
+    if not line:
+        return line
+
+    seen_view_jd = False
+
+    def repl(match: re.Match[str]) -> str:
+        nonlocal seen_view_jd
+        if seen_view_jd:
+            return ""
+        seen_view_jd = True
+        return match.group(0)
+
+    deduped = _VIEW_JD_LINK_RE.sub(repl, line)
+    deduped = re.sub(r"[ \t]{2,}", " ", deduped).strip()
+    return deduped
+
+
+def _remove_view_jd_links(line: str) -> str:
+    if not line:
+        return line
+
+    cleaned = _VIEW_JD_LINK_RE.sub("", line)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned).strip()
+    return cleaned
+
+
+def _line_starts_new_list_item(line: str) -> bool:
+    stripped = line.lstrip()
+    return bool(re.match(r"^(?:[-*]|\d+\.)\s+", stripped))
+
+
+def _dedupe_view_jd_across_lines(text: str) -> str:
+    if not text:
+        return text
+
+    out_lines: List[str] = []
+    current_item_has_view_jd = False
+
+    for raw_line in text.splitlines():
+        line = _dedupe_view_jd_links(raw_line.rstrip())
+        stripped = line.strip()
+
+        if not stripped:
+            out_lines.append(line)
+            current_item_has_view_jd = False
+            continue
+
+        starts_new_item = _line_starts_new_list_item(line)
+        if starts_new_item:
+            current_item_has_view_jd = False
+
+        if current_item_has_view_jd and _line_has_jd_link(line, None):
+            line = _remove_view_jd_links(line)
+
+        if _line_has_jd_link(line, None):
+            current_item_has_view_jd = True
+
+        out_lines.append(line)
+
+    return "\n".join(out_lines)
 
 
 def _inject_assistant_links(
@@ -398,7 +456,7 @@ def _inject_assistant_links(
             line = f"{line} {' '.join(additions)}"
         out_lines.append(line)
 
-    return "\n".join(out_lines)
+    return _dedupe_view_jd_across_lines("\n".join(out_lines))
 
 
 def _run_openai_chat(
