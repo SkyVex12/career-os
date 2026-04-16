@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -29,6 +30,7 @@ _THREADS: Dict[str, Dict[str, Any]] = {}
 
 _ASSISTANT_MODEL = os.getenv("OPENAI_ASSISTANT_MODEL", "gpt-4.1-mini")
 _MAX_CONTEXT_MESSAGES = 12
+_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)", re.IGNORECASE)
 
 
 class ThreadOut(BaseModel):
@@ -270,10 +272,24 @@ def _line_needs_reply(line: str) -> bool:
             "schedule",
             "confirm",
             "availability",
+            "available",
+            "share your availability",
+            "share availability",
+            "time works",
+            "times that work",
+            "time slots",
+            "calendar",
             "follow up",
             "reach out",
             "send",
+            "phone screen",
+            "intro call",
+            "screening call",
+            "next round",
+            "move forward",
+            "technical interview",
             "onsite",
+            "onsite loop",
             "interview",
         )
     )
@@ -291,7 +307,21 @@ def _build_reply_mailto(line: str, fact: Dict[str, Optional[str]]) -> Optional[s
         subject = f"Follow-up on {fact.get('company') or 'this opportunity'}"
 
     line_lower = line.lower()
-    if any(word in line_lower for word in ("schedule", "availability", "interview")):
+    if any(
+        word in line_lower
+        for word in (
+            "schedule",
+            "availability",
+            "available",
+            "phone screen",
+            "intro call",
+            "screening call",
+            "technical interview",
+            "onsite",
+            "interview",
+            "calendar",
+        )
+    ):
         body = (
             "Hi,\n\n"
             "Thanks for reaching out. I'd be happy to continue the process. "
@@ -318,6 +348,29 @@ def _build_reply_mailto(line: str, fact: Dict[str, Optional[str]]) -> Optional[s
     return f"mailto:{sender}?subject={quote(subject)}&body={quote(body)}"
 
 
+def _line_has_jd_link(line: str, jd_url: Optional[str]) -> bool:
+    if not line or not jd_url:
+        return False
+    jd_url = jd_url.strip()
+    for label, url in _MARKDOWN_LINK_RE.findall(line):
+        if (label or "").strip().lower() == "view jd":
+            return True
+        if (url or "").strip() == jd_url:
+            return True
+    return False
+
+
+def _line_has_reply_link(line: str) -> bool:
+    if not line:
+        return False
+    for label, url in _MARKDOWN_LINK_RE.findall(line):
+        if (label or "").strip().lower() == "reply via email":
+            return True
+        if (url or "").strip().lower().startswith("mailto:"):
+            return True
+    return False
+
+
 def _inject_assistant_links(
     text: str, facts: List[Dict[str, Optional[str]]]
 ) -> str:
@@ -333,10 +386,10 @@ def _inject_assistant_links(
             continue
 
         additions: List[str] = []
-        if "[View JD](" not in line and fact.get("jd_url"):
+        if not _line_has_jd_link(line, fact.get("jd_url")) and fact.get("jd_url"):
             additions.append(f"[View JD]({fact['jd_url']})")
 
-        if "[Reply via email](" not in line and _line_needs_reply(line):
+        if not _line_has_reply_link(line) and _line_needs_reply(line):
             mailto = _build_reply_mailto(line, fact)
             if mailto:
                 additions.append(f"[Reply via email]({mailto})")
@@ -381,16 +434,21 @@ def _run_openai_chat(
         "applications or recruiter emails, include a [View JD](JD url) link "
         "on every item using the matching JD from the user data whenever a "
         "JD url is available.\n"
-        "- Suggest [Reply via email](mailto:...) when the recommended next "
-        "step genuinely requires replying to the recruiter, such as "
-        "confirming availability, scheduling interviews, answering a direct "
-        "request, or sending follow-up information.\n"
+        "- If an item genuinely requires the user to respond to the recruiter, "
+        "append a [Reply via email](mailto:...) link on that same line. Do "
+        "this whenever possible.\n"
+        "- This includes cases like confirming availability, scheduling phone "
+        "screens or interviews, responding to an intro call, sharing time "
+        "windows, answering a direct recruiter request, or sending follow-up "
+        "information.\n"
         "- When you add [Reply via email](mailto:...), include a pre-filled "
         "subject and body. Build the mailto like: "
         "mailto:<sender>?subject=<urlencoded subject>&body=<urlencoded body>. "
         "Prefix the subject with 'Re: ' when replying. URL-encode spaces as "
         "%20 and newlines as %0A. Keep the draft body short, professional, "
         "and specific to the email's intent.\n"
+        "- In summaries and action lists, prefer including the reply link "
+        "immediately rather than merely telling the user they should reply.\n"
         "- Do not add [Reply via email](mailto:...) for items that do not "
         "need a response yet, such as acknowledgements, passive review "
         "updates, or completed/rejected outcomes.\n"
