@@ -297,10 +297,10 @@ Candidate profile:
 - identity: Senior Software Engineer
 - total_experience: 10 years
 - career:
-  - Stepful | Jan 2022 - Dec 2025 | Senior Software Engineer
-  - Checkly | Oct 2018 - Nov 2021 | Software Engineer
-  - Adesso Solutions | Jun 2016 - Aug 2018 | Software Engineer
-  - Ai2 | Mar 2015 - May 2016 | Software Engineer
+  - Xendit | Jan 2022 - Sep 2025 | Senior Software Engineer
+  - Evolve | Oct 2018 - Nov 2021 | Software Engineer
+  - Melechain Solutions | Jun 2016 - Aug 2018 | Software Engineer
+  - Propine | Mar 2015 - May 2016 | Software Engineer
 
 Block generation:
 - clearance required

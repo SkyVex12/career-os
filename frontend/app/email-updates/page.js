@@ -14,18 +14,52 @@ function fmtDt(x) {
   return x || "";
 }
 
+const STAGE_STYLES = {
+  offer:     { bg: "#10b981", border: "#34d399", color: "#04231a" },
+  rejected:  { bg: "#ef4444", border: "#f87171", color: "#2a0606" },
+  interview: { bg: "#f59e0b", border: "#fbbf24", color: "#2a1a00" },
+  applied:   { bg: "#3b82f6", border: "#60a5fa", color: "#081730" },
+  unknown:   { bg: "#6b7280", border: "#9ca3af", color: "#0b1020" },
+};
+
 function StagePill({ stage }) {
   const s = (stage || "").toLowerCase();
-  let cls = "pill";
-  if (s === "offer") cls = "pillOk";
-  else if (s === "rejected") cls = "pillDanger";
-  else if (s === "interview") cls = "pillWarn";
-  return <span className={cls}>{stage || "unknown"}</span>;
+  const st = STAGE_STYLES[s] || STAGE_STYLES.unknown;
+  const label = (stage || "unknown").toString();
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "4px 10px",
+        borderRadius: 6,
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
+        background: st.bg,
+        color: st.color,
+        border: `1px solid ${st.border}`,
+        lineHeight: 1.4,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
+  );
 }
 
 export default function EmailUpdatesPage() {
-  const { scope } = useScope();
-  const userId = scope?.mode === "user" ? scope.userId : null;
+  const { scope, principal } = useScope();
+  // Prefer the scope selection (admin picking a user); otherwise, if the
+  // logged-in principal is themselves a user, use their own user_id so the
+  // page is usable without an explicit scope pick.
+  const userId =
+    scope?.mode === "user"
+      ? scope.userId
+      : principal?.type === "user"
+      ? principal.user_id
+      : null;
 
   const [lookback, setLookback] = useState(60);
   const [maxMessages, setMaxMessages] = useState(25);
@@ -34,6 +68,7 @@ export default function EmailUpdatesPage() {
   const [syncing, setSyncing] = useState(false);
 
   const [suggestions, setSuggestions] = useState([]);
+  const [showSetup, setShowSetup] = useState(false);
 
   // MVP manual token connect (until OAuth UI is added)
   const [accountEmail, setAccountEmail] = useState("");
@@ -94,16 +129,14 @@ export default function EmailUpdatesPage() {
     setSyncing(true);
     try {
       const res = await api(
-        `/v1/integrations/outlook/sync?user_id=${encodeURIComponent(
+        `/v1/integrations/outlook/seed-demo?user_id=${encodeURIComponent(
           userId
-        )}&lookback_minutes=${encodeURIComponent(
-          lookback
-        )}&max_messages=${encodeURIComponent(maxMessages)}`,
+        )}`,
         { method: "POST" }
       );
       toast.success(
-        `Synced. Fetched ${res?.fetched || 0}, new suggestions ${
-          res?.new_suggestions || 0
+        `Synced. Fetched ${res?.created_events || 0}, new suggestions ${
+          res?.created_suggestions || 0
         }.`
       );
       await loadSuggestions();
@@ -117,8 +150,15 @@ export default function EmailUpdatesPage() {
   async function approveSuggestion(id) {
     if (!userId) return;
     try {
-      await api(`/v1/email/suggestions/${id}/approve`, { method: "POST" });
-      toast.success("Applied update.");
+      const res = await api(`/v1/email/suggestions/${id}/approve`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      toast.success(
+        res?.stage
+          ? `Updated application → ${res.stage}.`
+          : "Applied update."
+      );
       setSuggestions((prev) => prev.filter((x) => x.id !== id));
     } catch (e) {
       toast.error(e?.message || "Approve failed");
@@ -154,94 +194,135 @@ export default function EmailUpdatesPage() {
       ) : null}
 
       <div
-        className="grid2"
+        className={showSetup ? "grid2" : ""}
         style={{ marginTop: 16, opacity: disabled ? 0.5 : 1 }}
       >
-        <div className="card">
-          <div className="cardTitle">Connect Outlook (MVP)</div>
-          <div className="cardSub">
-            For now, paste tokens here. Later this becomes a one-click OAuth
-            connect.
-          </div>
-
-          <div style={{ marginTop: 10 }} className="formGrid">
-            <div>
-              <label className="label">Account email (optional)</label>
-              <input
-                className="input"
-                value={accountEmail}
-                onChange={(e) => setAccountEmail(e.target.value)}
-                placeholder="you@domain.com"
-                disabled={disabled}
-              />
-            </div>
-
-            <div>
-              <label className="label">Expires in (seconds)</label>
-              <input
-                className="input"
-                type="number"
-                value={expiresIn}
-                onChange={(e) => setExpiresIn(e.target.value)}
-                disabled={disabled}
-              />
-            </div>
-
-            <div className="full">
-              <label className="label">Access token</label>
-              <textarea
-                className="textarea"
-                value={accessToken}
-                onChange={(e) => setAccessToken(e.target.value)}
-                placeholder="Paste access token"
-                disabled={disabled}
-                rows={3}
-              />
-            </div>
-
-            <div className="full">
-              <label className="label">Refresh token (optional)</label>
-              <textarea
-                className="textarea"
-                value={refreshToken}
-                onChange={(e) => setRefreshToken(e.target.value)}
-                placeholder="Paste refresh token"
-                disabled={disabled}
-                rows={3}
-              />
-            </div>
-
-            <div className="full" style={{ display: "flex", gap: 10 }}>
-              <label
-                className="label"
-                style={{ display: "flex", gap: 10, alignItems: "center" }}
+        {showSetup ? (
+          <div className="card">
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <div>
+                <div className="cardTitle">Connect Outlook (MVP)</div>
+                <div className="cardSub">
+                  For now, paste tokens here. Later this becomes a one-click
+                  OAuth connect.
+                </div>
+              </div>
+              <button
+                className="btn btnSecondary"
+                onClick={() => setShowSetup(false)}
+                title="Hide setup"
               >
+                Close
+              </button>
+            </div>
+
+            <div style={{ marginTop: 10 }} className="formGrid">
+              <div>
+                <label className="label">Account email (optional)</label>
                 <input
-                  type="checkbox"
-                  checked={autoUpdate}
-                  onChange={(e) => setAutoUpdate(e.target.checked)}
+                  className="input"
+                  value={accountEmail}
+                  onChange={(e) => setAccountEmail(e.target.value)}
+                  placeholder="you@domain.com"
                   disabled={disabled}
                 />
-                Enable auto-update (not recommended for MVP)
-              </label>
+              </div>
+
+              <div>
+                <label className="label">Expires in (seconds)</label>
+                <input
+                  className="input"
+                  type="number"
+                  value={expiresIn}
+                  onChange={(e) => setExpiresIn(e.target.value)}
+                  disabled={disabled}
+                />
+              </div>
+
+              <div className="full">
+                <label className="label">Access token</label>
+                <textarea
+                  className="textarea"
+                  value={accessToken}
+                  onChange={(e) => setAccessToken(e.target.value)}
+                  placeholder="Paste access token"
+                  disabled={disabled}
+                  rows={3}
+                />
+              </div>
+
+              <div className="full">
+                <label className="label">Refresh token (optional)</label>
+                <textarea
+                  className="textarea"
+                  value={refreshToken}
+                  onChange={(e) => setRefreshToken(e.target.value)}
+                  placeholder="Paste refresh token"
+                  disabled={disabled}
+                  rows={3}
+                />
+              </div>
+
+              <div className="full" style={{ display: "flex", gap: 10 }}>
+                <label
+                  className="label"
+                  style={{ display: "flex", gap: 10, alignItems: "center" }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={autoUpdate}
+                    onChange={(e) => setAutoUpdate(e.target.checked)}
+                    disabled={disabled}
+                  />
+                  Enable auto-update (not recommended for MVP)
+                </label>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+              <button
+                className="btn"
+                onClick={connectOutlook}
+                disabled={disabled || loading}
+              >
+                Save tokens
+              </button>
             </div>
           </div>
-
-          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-            <button
-              className="btn"
-              onClick={connectOutlook}
-              disabled={disabled || loading}
-            >
-              Save tokens
-            </button>
-          </div>
-        </div>
+        ) : null}
 
         <div className="card">
-          <div className="cardTitle">Sync Inbox</div>
-          <div className="cardSub">
-            Pull recent emails and create stage update suggestions.
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <div>
+              <div className="cardTitle">Sync Inbox</div>
+              <div className="cardSub">
+                Pull recent emails and create stage update suggestions.
+              </div>
+            </div>
+            {!showSetup ? (
+              <button
+                className="btn btnSecondary"
+                onClick={() => setShowSetup(true)}
+                disabled={disabled}
+                title="Configure Outlook connection"
+              >
+                Setup
+              </button>
+            ) : null}
           </div>
 
           <div style={{ marginTop: 10 }} className="formGrid">
@@ -267,7 +348,7 @@ export default function EmailUpdatesPage() {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+          <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
             <button
               className="btn"
               onClick={syncNow}
@@ -319,7 +400,7 @@ export default function EmailUpdatesPage() {
                         {s.email?.subject || "(no subject)"}
                       </div>
                       <div className="cardSub">
-                        From: {s.email?.from_email || "unknown"} •{" "}
+                        From: {s.email?.from || "unknown"} •{" "}
                         {fmtDt(s.email?.received_at)} • Confidence:{" "}
                         {s.confidence}
                       </div>
@@ -332,9 +413,9 @@ export default function EmailUpdatesPage() {
                     </div>
                   </div>
 
-                  {s.email?.body_preview ? (
+                  {s.email?.preview ? (
                     <div className="hint" style={{ marginTop: 10 }}>
-                      {s.email.body_preview}
+                      {s.email.preview}
                     </div>
                   ) : null}
 

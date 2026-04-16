@@ -98,7 +98,9 @@ def update_user_profile(
         setattr(user, field, value)
 
     if any(k in updates for k in ("first_name", "last_name")):
-        user.name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.name
+        user.name = (
+            f"{user.first_name or ''} {user.last_name or ''}".strip() or user.name
+        )
     user.updated_at = dt.datetime.now()
     db.commit()
     db.refresh(user)
@@ -212,7 +214,9 @@ def _extract_template_preview(sf: StoredFile) -> dict:
         resp.raise_for_status()
         doc = Document(BytesIO(resp.content))
     except Exception:
-        raise HTTPException(status_code=500, detail="Failed to read assigned DOCX template")
+        raise HTTPException(
+            status_code=500, detail="Failed to read assigned DOCX template"
+        )
 
     lines: list[str] = []
     for paragraph in doc.paragraphs:
@@ -250,7 +254,9 @@ def _read_stored_docx(sf: StoredFile) -> bytes:
         resp.raise_for_status()
         return resp.content
     except Exception:
-        raise HTTPException(status_code=500, detail="Failed to read assigned DOCX template")
+        raise HTTPException(
+            status_code=500, detail="Failed to read assigned DOCX template"
+        )
 
 
 @router.put("/users/{user_id}/resume-template-docx")
@@ -325,10 +331,11 @@ def get_resume_template_preview_pdf(
     try:
         pdf_bytes = docx_bytes_to_pdf_bytes(docx_bytes)
     except Exception:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to generate PDF preview for the assigned template",
-        )
+        pass
+        # raise HTTPException(
+        #     status_code=500,
+        #     detail="Failed to generate PDF preview for the assigned template",
+        # )
 
     return Response(content=pdf_bytes, media_type="application/pdf")
 

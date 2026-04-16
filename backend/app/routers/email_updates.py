@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -90,10 +90,15 @@ class ApproveIn(BaseModel):
 @router.post("/suggestions/{suggestion_id}/approve")
 def approve_suggestion(
     suggestion_id: int,
-    payload: ApproveIn,
+    payload: Optional[ApproveIn] = Body(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ):
+    # Frontend may POST with no body — fall back to defaults so we can
+    # approve purely from the suggestion's own suggested_stage/app.
+    if payload is None:
+        payload = ApproveIn()
+
     sugg = (
         db.query(ApplicationUpdateSuggestion)
         .filter(ApplicationUpdateSuggestion.id == suggestion_id)

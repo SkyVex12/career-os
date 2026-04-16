@@ -997,6 +997,17 @@ textarea:focus {
   flex-direction: row-reverse;
 }
 
+.msgContent {
+  max-width: 82%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.msgRowUser .msgContent {
+  align-items: flex-end;
+}
+
 .avatar {
   width: 34px;
   height: 34px;
@@ -1019,7 +1030,7 @@ textarea:focus {
 }
 
 .bubble {
-  max-width: 82%;
+  max-width: 100%;
   border-radius: 18px;
   padding: 10px 12px;
   position: relative;
@@ -1040,14 +1051,26 @@ textarea:focus {
   word-break: break-word;
 }
 
+.chatLink {
+  color: #93c5fd;
+  text-decoration: underline;
+  text-decoration-color: rgba(147, 197, 253, 0.45);
+  text-underline-offset: 2px;
+  word-break: break-word;
+}
+.chatLink:hover {
+  color: #bfdbfe;
+  text-decoration-color: #bfdbfe;
+}
+
 .bubbleActions {
-  margin-top: 8px;
+  margin-top: 6px;
   display: flex;
   gap: 8px;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
-.bubble:hover .bubbleActions {
+.msgRow:hover .bubbleActions {
   opacity: 1;
 }
 

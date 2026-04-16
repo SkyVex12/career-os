@@ -92,6 +92,11 @@ export default function AssistantPage() {
 
   async function send() {
     const text = input.trim();
+    await sendText(text);
+  }
+
+  async function sendText(rawText) {
+    const text = (rawText || "").trim();
     if (!text || sending) return;
 
     let tid = activeId;
@@ -245,7 +250,7 @@ export default function AssistantPage() {
                       <button
                         key={s}
                         className="chatChip"
-                        onClick={() => setInput(s)}
+                        onClick={() => sendText(s)}
                       >
                         {s}
                       </button>
@@ -298,15 +303,61 @@ export default function AssistantPage() {
   );
 }
 
+// Parses [label](url) and bare http(s)/mailto URLs into React nodes
+// with clickable links. Falls back to plain text for anything else.
+function renderRichText(text) {
+  if (!text) return null;
+  // Matches either [label](url) or a bare http(s)://... / mailto:... URL.
+  const pattern =
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)|(https?:\/\/[^\s<>"]+|mailto:[^\s<>"]+)/g;
+  const out = [];
+  let lastIdx = 0;
+  let key = 0;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    const start = match.index;
+    if (start > lastIdx) out.push(text.slice(lastIdx, start));
+
+    const label = match[1];
+    const mdUrl = match[2];
+    const bareUrl = match[3];
+    const url = mdUrl || bareUrl;
+    const visible = label || bareUrl;
+    const isMailto = url.startsWith("mailto:");
+    out.push(
+      <a
+        key={`lnk-${key++}`}
+        href={url}
+        target={isMailto ? undefined : "_blank"}
+        rel={isMailto ? undefined : "noopener noreferrer"}
+        className="chatLink"
+      >
+        {visible}
+      </a>
+    );
+    lastIdx = start + match[0].length;
+  }
+  if (lastIdx < text.length) out.push(text.slice(lastIdx));
+  return out;
+}
+
 function MessageRow({ m }) {
   const isUser = m.role === "user";
+  // Split on newlines so list-like responses still read correctly.
+  const lines = (m.content || "").split("\n");
   return (
     <div className={cx("msgRow", isUser && "msgRowUser")}>
       <div className={cx("avatar", isUser ? "avatarUser" : "avatarAI")}>
         {isUser ? "You" : "AI"}
       </div>
-      <div className={cx("bubble", isUser ? "bubbleUser" : "bubbleAI")}>
-        <div className="bubbleText">{m.content}</div>
+      <div className="msgContent">
+        <div className={cx("bubble", isUser ? "bubbleUser" : "bubbleAI")}>
+          <div className="bubbleText">
+            {lines.map((line, i) => (
+              <div key={i}>{renderRichText(line) || "\u00A0"}</div>
+            ))}
+          </div>
+        </div>
         <div className="bubbleActions">
           <button
             className="miniBtn"

@@ -17,6 +17,7 @@ from ..models import (
     Application,
     ApplicationUpdateSuggestion,
     AdminUser,
+    JobDescription,
 )
 
 
@@ -397,4 +398,349 @@ def sync_outlook(
         new_events=new_events,
         new_suggestions=new_suggestions,
         last_sync_at=integ.last_sync_at,
+    )
+
+
+# ----------------- demo seeding -----------------
+
+_DEMO_JDS: dict[str, str] = {
+    "WealthCounsel": (
+        "WealthCounsel is hiring a Software Developer (Virtual, Full-Time) to "
+        "join our product engineering group. You will build and maintain the "
+        "document-assembly and practice-management software used by estate "
+        "planning and business law attorneys across the U.S.\n\n"
+        "Responsibilities:\n"
+        "- Design and implement features across our Ruby on Rails and React "
+        "stack.\n"
+        "- Collaborate closely with product, design, and legal SMEs to ship "
+        "user-facing functionality.\n"
+        "- Write clean, well-tested code and participate in code reviews.\n"
+        "- Contribute to architectural decisions as our platform scales.\n\n"
+        "Requirements:\n"
+        "- 3+ years of professional software engineering experience.\n"
+        "- Strong fundamentals in at least one modern web framework.\n"
+        "- Comfort working remotely and asynchronously.\n"
+        "- Nice to have: experience in legal-tech or regulated SaaS."
+    ),
+    "Chronograph": (
+        "Chronograph builds portfolio intelligence software for the private "
+        "capital industry. We are hiring a Software Engineer to join our Data "
+        "Platform team.\n\n"
+        "You will:\n"
+        "- Build and own scalable data ingestion pipelines and internal APIs.\n"
+        "- Work with Python, TypeScript, Postgres, and Kafka.\n"
+        "- Partner with product and analytics to turn messy LP/GP data into "
+        "reliable product surfaces.\n\n"
+        "About you:\n"
+        "- 4+ years of backend engineering experience.\n"
+        "- Familiarity with data modeling and distributed systems.\n"
+        "- A bias toward shipping pragmatic, well-tested code."
+    ),
+    "Fullsteam": (
+        "Fullsteam is hiring a Senior Developer (Remote, US) to build and "
+        "extend the payment-processing and vertical SaaS products we operate "
+        "across more than 75 business units.\n\n"
+        "You will:\n"
+        "- Architect and deliver .NET / C# services that handle payments and "
+        "business operations at scale.\n"
+        "- Lead design reviews and mentor less-senior engineers.\n"
+        "- Partner with product to translate vertical-specific needs into "
+        "durable platform capabilities.\n\n"
+        "Requirements:\n"
+        "- 6+ years of backend development, ideally in payments, fintech, or "
+        "vertical SaaS.\n"
+        "- Strong SQL and API design skills.\n"
+        "- Experience operating production services (on-call, SLOs)."
+    ),
+    "Bitsight": (
+        "Bitsight is hiring a Full-Stack Software Engineer for the Ratings "
+        "Platform team. You'll work on the core systems that power cyber-risk "
+        "ratings used by thousands of enterprises.\n\n"
+        "Responsibilities:\n"
+        "- Build features across our React front-end and Python/Go back-end "
+        "services.\n"
+        "- Contribute to data modeling and query performance in a large "
+        "Postgres environment.\n"
+        "- Participate in system design and architectural discussions.\n\n"
+        "Qualifications:\n"
+        "- 4+ years of full-stack engineering experience.\n"
+        "- Solid grounding in REST/GraphQL API design.\n"
+        "- Security or risk-analytics domain experience is a plus."
+    ),
+    "Axios": (
+        "Axios is hiring a Software Engineer to work on the newsroom and "
+        "subscription products that power our smart-brevity journalism.\n\n"
+        "What you'll do:\n"
+        "- Build features across Node/TypeScript services and Next.js "
+        "front-ends.\n"
+        "- Partner with editors and product managers to ship high-visibility "
+        "reader-facing experiences.\n"
+        "- Contribute to platform work: observability, CI/CD, performance.\n\n"
+        "About you:\n"
+        "- 3+ years of full-stack experience, ideally at a media or consumer "
+        "product company.\n"
+        "- Comfort with ambiguity and shipping quickly.\n"
+        "- Care about the craft of journalism and the tools that support it."
+    ),
+    "LTK": (
+        "LTK (formerly rewardStyle / LIKEtoKNOW.it) is hiring a Software "
+        "Engineer to build the creator-commerce platform that powers more "
+        "than 200,000 lifestyle creators and their audiences.\n\n"
+        "Responsibilities:\n"
+        "- Design and ship features across our Python/Go services and "
+        "TypeScript/React applications.\n"
+        "- Partner with creator and consumer product teams on high-traffic "
+        "shopping experiences.\n"
+        "- Contribute to API design, data modeling, and system reliability.\n\n"
+        "Requirements:\n"
+        "- 3+ years of software engineering experience.\n"
+        "- Familiarity with one of our core stacks (Python, Go, or TS/React).\n"
+        "- Interest in commerce, creators, or large-scale consumer apps."
+    ),
+}
+
+
+_DEMO_EMAILS: list[dict] = [
+    {
+        "from": "careers@wealthcounsel.com",
+        "from_name": "WealthCounsel Talent Team",
+        "subject": "Thanks for applying — Software Developer (Virtual, Full-Time) at WealthCounsel",
+        "preview": (
+            "Hi Timothy,\n\nThanks for applying to the Software Developer (Virtual, Full-Time) "
+            "role at WealthCounsel. We've received your application and our hiring team "
+            "will be reviewing it over the next 5–7 business days. If your background is "
+            "a match for the role, a recruiter will reach out to schedule an introductory "
+            "conversation.\n\nIn the meantime, feel free to learn more about how we empower "
+            "estate planning attorneys at wealthcounsel.com/about.\n\nBest,\nWealthCounsel "
+            "Talent Team"
+        ),
+        "company": "WealthCounsel",
+        "role": "Software Developer (Virtual, Full-Time)",
+        "jd_url": (
+            "https://wealthcounsel-llc.gnahiring.com/job/1013008/"
+            "software-developer-virtual-full-time?d=2026-04-07+18%3A02%3A57+UTC&s=lif"
+        ),
+    },
+    {
+        "from": "priya.shah@chronograph.pe",
+        "from_name": "Priya Shah (Chronograph)",
+        "subject": "Chronograph — 30-min phone screen with engineering",
+        "preview": (
+            "Hi Timothy,\n\nI'm Priya on the Talent team at Chronograph — thanks for applying "
+            "to the Software Engineer role. Your experience with distributed systems and "
+            "data pipelines looks like a strong fit for our Data Platform team.\n\n"
+            "I'd love to set up a 30-minute phone screen with our Engineering Manager, "
+            "Marcus Chen, later this week. Could you share a couple of availability "
+            "windows Thursday or Friday between 10am and 4pm ET?\n\nLooking forward,\n"
+            "Priya"
+        ),
+        "company": "Chronograph",
+        "role": "Software Engineer",
+        "jd_url": (
+            "https://job-boards.greenhouse.io/embed/job_app?"
+            "for=chronograph&token=4802825007&utm_source=jobright"
+        ),
+    },
+    {
+        "from": "talentacquisition@fullsteam.com",
+        "from_name": "Fullsteam Talent Acquisition",
+        "subject": "Update on your Senior Developer application — Fullsteam",
+        "preview": (
+            "Dear Timothy,\n\nThank you for your interest in the Senior Developer (Remote, US) "
+            "position at Fullsteam and for taking the time to interview with our team.\n\n"
+            "After careful consideration, we regret to inform you that we will not be "
+            "moving forward with your candidacy for this role. The decision was a difficult "
+            "one — we received many strong applicants — and it is not a reflection of your "
+            "talents or experience.\n\nWe'll keep your profile on file and would encourage "
+            "you to apply again as new opportunities open up.\n\nWith appreciation,\n"
+            "Fullsteam Talent Acquisition"
+        ),
+        "company": "Fullsteam",
+        "role": "Senior Developer (Remote, US)",
+        "jd_url": (
+            "https://fullsteam.wd1.myworkdayjobs.com/External/"
+            "job/Remote---US/Senior-Developer_JR102093"
+        ),
+    },
+    {
+        "from": "jordan.ramirez@bitsight.com",
+        "from_name": "Jordan Ramirez (Bitsight Recruiting)",
+        "subject": "Bitsight Full-Stack Engineer — technical interview scheduling",
+        "preview": (
+            "Hi Timothy,\n\nGreat chatting with you on Monday! The team really enjoyed the "
+            "conversation and would like to move you to the next round — a 90-minute "
+            "technical interview (virtual) with two engineers from the Ratings Platform "
+            "team: a 45-minute system design discussion followed by a 45-minute coding "
+            "session.\n\nCould you share 2–3 availability windows next Tuesday, Wednesday, "
+            "or Thursday between 9am and 5pm ET so I can get a calendar invite out?\n\n"
+            "Thanks,\nJordan Ramirez\nSenior Technical Recruiter, Bitsight"
+        ),
+        "company": "Bitsight",
+        "role": "Software Engineer, Full-Stack",
+        "jd_url": (
+            "https://bitsight.wd1.myworkdayjobs.com/Bitsight/"
+            "job/Remote-USA/Software-Engineer--Full-Stack_JR101221-1"
+        ),
+    },
+    {
+        "from": "sam.okafor@axios.com",
+        "from_name": "Sam Okafor (Axios Recruiting)",
+        "subject": "Axios onsite loop — scheduling",
+        "preview": (
+            "Hi Timothy,\n\nThanks for turning around the take-home so quickly. The engineers "
+            "who reviewed it (Dana on Platform, Li-Wei on Newsroom Tools) were impressed "
+            "with your write-up on trade-offs and caching strategy.\n\nWe'd like to move "
+            "you to the onsite loop — four 45-minute virtual interviews back-to-back "
+            "covering: coding, system design, cross-functional collaboration, and a chat "
+            "with the hiring manager. Could you share your availability for next Tuesday "
+            "or Wednesday?\n\nBest,\nSam\nRecruiting, Axios"
+        ),
+        "company": "Axios",
+        "role": "Software Engineer",
+        "jd_url": (
+            "https://job-boards.greenhouse.io/embed/job_app?"
+            "for=axios&token=7818788&utm_source=jobright"
+        ),
+    },
+    {
+        "from": "no-reply@greenhouse-mail.io",
+        "from_name": "LTK Recruiting",
+        "subject": "Thanks for applying to LTK — Software Engineer",
+        "preview": (
+            "Hi Timothy,\n\nThank you for applying to the Software Engineer role at LTK "
+            "(formerly rewardStyle / LIKEtoKNOW.it). This note is to confirm that your "
+            "application has been received and is now in our recruiting team's queue.\n\n"
+            "We review every application and aim to respond within two weeks. If your "
+            "background is a match for this role or another open position at LTK, a "
+            "recruiter will reach out directly to set up an intro call.\n\nThanks again "
+            "for your interest in LTK.\n\n— LTK Recruiting"
+        ),
+        "company": "LTK",
+        "role": "Software Engineer",
+        "jd_url": (
+            "https://job-boards.greenhouse.io/embed/job_app?"
+            "for=shopltk&token=7658417003&utm_source=jobright"
+        ),
+    },
+]
+
+
+class DemoSeedOut(BaseModel):
+    ok: bool
+    created_events: int
+    created_suggestions: int
+
+
+@router.post("/seed-demo", response_model=DemoSeedOut)
+def seed_demo_emails(
+    user_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+):
+    """Populate sample inbox events + suggestions for demos.
+    Does NOT require real Outlook tokens — uses built-in fixtures so the
+    email-analysis flow can be shown end-to-end.
+    """
+    if not _can_access_user(db, principal, user_id):
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    now = _now_utc()
+    created_events = 0
+    created_suggestions = 0
+
+    # Bumping the "v" whenever the demo fixtures change forces a fresh seed
+    # for users who already ran an earlier version of the demo.
+    demo_version = "v3"
+
+    for i, demo in enumerate(_DEMO_EMAILS):
+        dedupe_id = f"demo-{demo_version}-{user_id}-{i}"
+        existing = (
+            db.query(EmailEvent)
+            .filter(
+                EmailEvent.user_id == user_id,
+                EmailEvent.provider == "demo",
+                EmailEvent.internet_message_id == dedupe_id,
+            )
+            .first()
+        )
+        if existing:
+            continue
+
+        # Upsert a demo Application so the email has a JD URL to link to.
+        demo_app_id = f"demo-app-{demo_version}-{user_id}-{i}"
+        app = db.query(Application).filter(Application.id == demo_app_id).first()
+        if not app:
+            app = Application(
+                id=demo_app_id,
+                user_id=user_id,
+                company=demo["company"],
+                role=demo["role"],
+                url=demo["jd_url"],
+                stage="applied",
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(app)
+            db.flush()
+
+            # Seed a JobDescription row so the application has full context
+            # (used by JD analysis, resume tailoring, and assistant grounding).
+            jd_text = _DEMO_JDS.get(demo["company"])
+            if jd_text:
+                db.add(
+                    JobDescription(
+                        user_id=user_id,
+                        application_id=app.id,
+                        jd_text=jd_text,
+                        created_at=now,
+                    )
+                )
+
+        received = now - dt.timedelta(hours=i)
+        ev = EmailEvent(
+            user_id=user_id,
+            provider="demo",
+            message_id=dedupe_id,
+            internet_message_id=dedupe_id,
+            from_email=demo["from"],
+            subject=demo["subject"],
+            received_at=received,
+            body_preview=demo["preview"],
+            web_link=None,
+            raw_json=None,
+            created_at=now,
+        )
+        db.add(ev)
+        db.flush()
+        created_events += 1
+
+        stage, stage_conf, stage_reason = _classify_email(
+            ev.subject or "", ev.body_preview or ""
+        )
+        if stage == "unknown":
+            continue
+
+        # Direct match via the demo app we just upserted — higher confidence
+        # than the keyword-based _match_application fallback.
+        conf = min(100, int(0.6 * stage_conf + 0.4 * 90))
+
+        sugg = ApplicationUpdateSuggestion(
+            user_id=user_id,
+            application_id=app.id,
+            email_event_id=ev.id,
+            suggested_stage=stage,
+            confidence=conf,
+            reason=f"{stage_reason}; matched to {demo['company']} demo application",
+            status="pending",
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(sugg)
+        created_suggestions += 1
+
+    db.commit()
+    return DemoSeedOut(
+        ok=True,
+        created_events=created_events,
+        created_suggestions=created_suggestions,
     )

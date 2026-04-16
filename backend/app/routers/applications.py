@@ -412,10 +412,12 @@ def list_applications(
             )
         )
 
+    created_order = (Application.created_at.asc(), Application.id.asc())
+
     if not dedupe:
         total = query.count()
         items = (
-            query.order_by(Application.created_at.desc())
+            query.order_by(*created_order)
             .offset((page - 1) * page_size)
             .limit(page_size)
             .all()
@@ -490,7 +492,7 @@ def list_applications(
         total = db.query(func.count()).select_from(final_q.subquery()).scalar() or 0
 
         rows = (
-            final_q.order_by(ranked.c.created_at.desc())
+            final_q.order_by(ranked.c.created_at.asc(), ranked.c.id.asc())
             .offset((page - 1) * page_size)
             .limit(page_size)
             .all()
